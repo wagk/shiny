@@ -2,6 +2,8 @@
 #include <GLFW/glfw3.h>
 #include <FreeImage.h>
 
+#include "vk/instance.h"
+
 #include <iostream>
 #include <stdexcept>
 
@@ -20,7 +22,8 @@ public:
 private:
   GLFWwindow* window;
 
-  VkInstance instance;
+  //VkInstance instance;
+  vk::instance instance;
 
   void initWindow() {
     glfwInit();
@@ -42,7 +45,8 @@ private:
   }
 
   void cleanup() {
-    vkDestroyInstance(instance, nullptr);
+    //vkDestroyInstance(instance, nullptr);
+    instance.destroy();
 
     glfwDestroyWindow(window);
 
@@ -50,28 +54,32 @@ private:
   }
 
   void createInstance() {
-    VkApplicationInfo appInfo = {};
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "Hello Triangle";
-    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
+    //VkApplicationInfo appInfo = {};
+    //appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    //appInfo.pApplicationName = "Hello Triangle";
+    //appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    //appInfo.pEngineName = "No Engine";
+    //appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+    //appInfo.apiVersion = VK_API_VERSION_1_0;
 
-    VkInstanceCreateInfo createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    createInfo.pApplicationInfo = &appInfo;
+    //VkInstanceCreateInfo createInfo = {};
+    //createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    //createInfo.pApplicationInfo = &appInfo;
 
-    uint32_t glfwExtensionCount = 0;
-    const char** glfwExtensions;
-    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+    //uint32_t glfwExtensionCount = 0;
+    //const char** glfwExtensions;
+    //glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-    createInfo.enabledExtensionCount = glfwExtensionCount;
-    createInfo.ppEnabledExtensionNames = glfwExtensions;
+    //createInfo.enabledExtensionCount = glfwExtensionCount;
+    //createInfo.ppEnabledExtensionNames = glfwExtensions;
 
-    createInfo.enabledLayerCount = 0;
+    //createInfo.enabledLayerCount = 0;
 
-    if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
+    //if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
+    //  throw std::runtime_error("failed to create instance!");
+    //}
+
+    if (!instance.create()) {
       throw std::runtime_error("failed to create instance!");
     }
   }
