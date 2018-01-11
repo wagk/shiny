@@ -2,7 +2,7 @@
 
 #include <vulkan/vulkan.h>
 
-namespace vk {
+namespace shiny::graphic::vk {
 
   VkApplicationInfo default_appinfo();
 
@@ -13,7 +13,6 @@ namespace vk {
     instance(const instance&) = delete;
     ~instance();
 
-    operator bool() const;
     operator VkInstance() const;
 
     bool create();

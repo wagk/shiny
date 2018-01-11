@@ -3,7 +3,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW\glfw3.h>
 
-namespace vk {
+namespace shiny::graphic::vk {
    
   VkApplicationInfo default_appinfo()
   {
@@ -29,11 +29,6 @@ namespace vk {
   instance::~instance()
   {
     destroy();
-  }
-
-  instance::operator bool() const
-  {
-    return m_result == VK_SUCCESS;
   }
 
   instance::operator VkInstance() const

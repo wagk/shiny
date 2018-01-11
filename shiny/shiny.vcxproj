@@ -128,6 +128,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="renderer.cpp" />
     <ClCompile Include="vk\instance.cpp" />
+    <ClCompile Include="window.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\FreeImage.h" />
@@ -294,6 +295,7 @@
     <ClInclude Include="include\vulkan\vulkan.hpp" />
     <ClInclude Include="renderer.h" />
     <ClInclude Include="vk\instance.h" />
+    <ClInclude Include="window.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="include\glm\detail\func_common.inl" />

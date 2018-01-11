@@ -1,5 +1,9 @@
 #pragma once
 
+#include "vk/instance.h"
+
+struct GLFWwindow;
+
 namespace shiny {
 
   class renderer
@@ -8,7 +12,15 @@ namespace shiny {
     renderer();
     ~renderer();
 
+    void init();
+    void draw();
+
   private:
+
+    // used in place of throwing exceptions
+    bool m_bad_init;
+
+    graphic::vk::instance m_instance;
 
   };
 
