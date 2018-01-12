@@ -3,6 +3,9 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW\glfw3.h>
 
+#include <algorithm>
+#include <iostream>
+
 namespace shiny::graphic::vk {
    
   VkApplicationInfo default_appinfo()
@@ -42,6 +45,18 @@ namespace shiny::graphic::vk {
     const char** glfwExtensions = nullptr;
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
+    //check which extensions does glfw need that isn't supported
+    auto instance_ext_names = extension_names();
+    for (size_t i = 0; i < glfwExtensionCount; i++) {
+      bool exists = false;
+      for (const auto& elem : instance_ext_names) {
+        if (elem == glfwExtensions[i]) { exists = true; }
+      }
+      if (exists == false) {
+        std::cerr << glfwExtensions[i] << " is not supported." << std::endl;
+      }
+    }
+
     VkApplicationInfo app_info = default_appinfo();
     
     VkInstanceCreateInfo create_info = {};
@@ -65,6 +80,31 @@ namespace shiny::graphic::vk {
       m_instance = VK_NULL_HANDLE;
       m_has_init = false;
     }
+  }
+
+  // does not need created instance to be called
+  std::vector<VkExtensionProperties> instance::extensions() const
+  {
+    uint32_t ext_count;
+    vkEnumerateInstanceExtensionProperties(nullptr, &ext_count, nullptr);
+    
+    std::vector<VkExtensionProperties> extensions(ext_count);
+    vkEnumerateInstanceExtensionProperties(nullptr, &ext_count, extensions.data());
+
+    return extensions;
+  }
+
+  std::vector<std::string> instance::extension_names() const
+  {
+    auto extensions = this->extensions();
+    std::vector<std::string> names(extensions.size());
+
+    std::transform(extensions.begin(), extensions.end(), names.begin(), 
+      [](const VkExtensionProperties& p) {
+      return p.extensionName;
+    });
+
+    return names;
   }
 
 }

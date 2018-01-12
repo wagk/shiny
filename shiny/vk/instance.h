@@ -2,6 +2,9 @@
 
 #include <vulkan/vulkan.h>
 
+#include <vector>
+#include <string>
+
 namespace shiny::graphic::vk {
 
   VkApplicationInfo default_appinfo();
@@ -18,7 +21,11 @@ namespace shiny::graphic::vk {
     bool create();
     void destroy();
 
+    std::vector<std::string> extension_names() const;
+
   private:
+
+    std::vector<VkExtensionProperties> extensions() const;
 
     VkInstance m_instance;
     VkResult m_result;
