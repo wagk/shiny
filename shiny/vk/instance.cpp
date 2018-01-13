@@ -6,6 +6,31 @@
 #include <algorithm>
 #include <iostream>
 
+namespace {
+
+  //checks if given layers are supported by the instance
+  bool check_validation_layer_support(const std::vector<std::string>& layers)
+  {
+    uint32_t layer_count;
+    vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
+
+    std::vector<VkLayerProperties> available_layers(layer_count);
+    vkEnumerateInstanceLayerProperties(&layer_count, available_layers.data());
+
+    for (const auto& layer_name : layers) {
+      bool available = false;
+      for (const auto& elem : available_layers) {
+        if (elem.layerName == layer_name) { available = true; }
+      }
+      if (available == false) {
+        return false;
+      }
+    }
+    
+    return true;
+  }
+}
+
 namespace shiny::graphic::vk {
    
   VkApplicationInfo default_appinfo()
@@ -39,8 +64,12 @@ namespace shiny::graphic::vk {
     return m_instance;
   }
 
-  bool instance::create()
+  bool instance::create(const std::vector<std::string>* enabled_layers)
   {
+    if (enabled_layers && check_validation_layer_support(*enabled_layers) == false) {
+      throw std::runtime_error("validation layers are requested but not available!");
+    }
+
     uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions = nullptr;
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
@@ -65,6 +94,19 @@ namespace shiny::graphic::vk {
     create_info.enabledExtensionCount = glfwExtensionCount;
     create_info.ppEnabledExtensionNames = glfwExtensions;
     create_info.enabledLayerCount = 0;
+
+    //vulkan only sees a char array buffer
+    std::vector<const char*> validation_strings;
+    if (enabled_layers) {
+      validation_strings.resize(enabled_layers->size());
+      std::transform(enabled_layers->begin(), enabled_layers->end(), validation_strings.begin(),
+        [](const std::string& s) {return s.c_str(); });
+      create_info.enabledLayerCount = static_cast<uint32_t>(validation_strings.size());
+      create_info.ppEnabledLayerNames = validation_strings.data();
+    }
+    else {
+      create_info.enabledLayerCount = 0;
+    }
 
     // https://www.khronos.org/registry/vulkan/specs/1.0/man/html/vkCreateInstance.html
     m_result = vkCreateInstance(&create_info, nullptr, &m_instance);

@@ -18,7 +18,7 @@ namespace shiny::graphic::vk {
 
     operator VkInstance() const;
 
-    bool create();
+    bool create(const std::vector<std::string>* enabled_layers = nullptr);
     void destroy();
 
     std::vector<std::string> extension_names() const;
