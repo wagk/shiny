@@ -1,4 +1,4 @@
-#include "instance.h"
+#include "./instance.h"
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW\glfw3.h>
@@ -8,145 +8,216 @@
 
 namespace {
 
-  //checks if given layers are supported by the instance
-  bool check_validation_layer_support(const std::vector<std::string>& layers)
-  {
-    uint32_t layer_count;
-    vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
+     //Finds the debugcallback extension if it exists
+     VkResult create_debug_report_callback_ext(
+          VkInstance                                instance,
+          const VkDebugReportCallbackCreateInfoEXT* p_create_info,
+          const VkAllocationCallbacks*              p_allocator,
+          VkDebugReportCallbackEXT*                 p_callback)
+     {
+          auto func = (PFN_vkCreateDebugReportCallbackEXT)
+               vkGetInstanceProcAddr(instance, "vkCreateDebugReportCallbackEXT");
 
-    std::vector<VkLayerProperties> available_layers(layer_count);
-    vkEnumerateInstanceLayerProperties(&layer_count, available_layers.data());
+          if(func != nullptr){
+               return func(instance, p_create_info, p_allocator, p_callback);
+          }
+          else {
+               return VK_ERROR_EXTENSION_NOT_PRESENT;
+          }
+     }
 
-    for (const auto& layer_name : layers) {
-      bool available = false;
-      for (const auto& elem : available_layers) {
-        if (elem.layerName == layer_name) { available = true; }
-      }
-      if (available == false) {
-        return false;
-      }
-    }
-    
-    return true;
-  }
+
+     //checks if given layers are supported by the instance
+     bool check_validation_layer_support(const std::vector<const char*>& layers)
+     {
+          uint32_t layer_count;
+          vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
+
+          std::vector<VkLayerProperties> available_layers(layer_count);
+          vkEnumerateInstanceLayerProperties(&layer_count,
+                                             available_layers.data());
+
+          for (const auto& layer_name : layers) {
+               bool available = false;
+               for (const auto& elem : available_layers) {
+                    if (elem.layerName == layer_name) { available = true; }
+               }
+               if (available == false) {
+                    return false;
+               }
+          }
+
+          return true;
+     }
+
+     std::vector<const char*>
+     get_required_extensions(bool enable_validation_layer)
+     {
+          uint32_t glfw_extension_count = 0;
+          const char** glfw_extensions =
+               glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+
+          std::vector<const char*>
+               extensions(glfw_extensions,
+                          glfw_extensions + glfw_extension_count);
+
+          //TODO: make this optional/debug only
+          extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+
+          return extensions;
+     }
 }
 
 namespace shiny::graphic::vk {
-   
-  VkApplicationInfo default_appinfo()
-  {
-    VkApplicationInfo app_info = {};
-    app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    app_info.pApplicationName = "Hello Triangle";
-    app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    app_info.pEngineName = "No Engine";
-    app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    app_info.apiVersion = VK_API_VERSION_1_0;
 
-    return app_info;
-  }
+     VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
+          VkDebugReportFlagsEXT      flags,
+          VkDebugReportObjectTypeEXT obj_type,
+          uint64_t                   obj,
+          size_t                     location,
+          int32_t                    code,
+          const char*                layer_prefix,
+          const char*                msg,
+          void*                      user_data)
+     {
+          std::cerr << "validation layer: " << msg << std::endl;
 
-  instance::instance()
-    : m_instance(VK_NULL_HANDLE)
-    , m_result(VK_SUCCESS)
-    , m_has_init(false)
-  {
-    
-  }
+          return VK_FALSE;
+     }
 
-  instance::~instance()
-  {
-    destroy();
-  }
+     VkApplicationInfo default_appinfo()
+     {
+          VkApplicationInfo app_info = {};
 
-  instance::operator VkInstance() const
-  {
-    return m_instance;
-  }
+          app_info.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+          app_info.pApplicationName   = "Hello Triangle";
+          app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+          app_info.pEngineName        = "No Engine";
+          app_info.engineVersion      = VK_MAKE_VERSION(1, 0, 0);
+          app_info.apiVersion         = VK_API_VERSION_1_0;
 
-  bool instance::create(const std::vector<std::string>* enabled_layers)
-  {
-    if (enabled_layers && check_validation_layer_support(*enabled_layers) == false) {
-      throw std::runtime_error("validation layers are requested but not available!");
-    }
+          return app_info;
+     }
 
-    uint32_t glfwExtensionCount = 0;
-    const char** glfwExtensions = nullptr;
-    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+     instance::instance()
+          : m_instance(VK_NULL_HANDLE)
+          , m_result(VK_SUCCESS)
+          , m_has_init(false)
+     {
 
-    //check which extensions does glfw need that isn't supported
-    auto instance_ext_names = extension_names();
-    for (size_t i = 0; i < glfwExtensionCount; i++) {
-      bool exists = false;
-      for (const auto& elem : instance_ext_names) {
-        if (elem == glfwExtensions[i]) { exists = true; }
-      }
-      if (exists == false) {
-        std::cerr << glfwExtensions[i] << " is not supported." << std::endl;
-      }
-    }
+     }
 
-    VkApplicationInfo app_info = default_appinfo();
-    
-    VkInstanceCreateInfo create_info = {};
-    create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    create_info.pApplicationInfo = &app_info;
-    create_info.enabledExtensionCount = glfwExtensionCount;
-    create_info.ppEnabledExtensionNames = glfwExtensions;
-    create_info.enabledLayerCount = 0;
+     instance::~instance()
+     {
+          destroy();
+     }
 
-    //vulkan only sees a char array buffer
-    std::vector<const char*> validation_strings;
-    if (enabled_layers) {
-      validation_strings.resize(enabled_layers->size());
-      std::transform(enabled_layers->begin(), enabled_layers->end(), validation_strings.begin(),
-        [](const std::string& s) {return s.c_str(); });
-      create_info.enabledLayerCount = static_cast<uint32_t>(validation_strings.size());
-      create_info.ppEnabledLayerNames = validation_strings.data();
-    }
-    else {
-      create_info.enabledLayerCount = 0;
-    }
+     instance::operator VkInstance() const
+     {
+          return m_instance;
+     }
 
-    // https://www.khronos.org/registry/vulkan/specs/1.0/man/html/vkCreateInstance.html
-    m_result = vkCreateInstance(&create_info, nullptr, &m_instance);
-    m_has_init = true;
+     void instance::enable_debug_reporting(VkDebugReportCallbackEXT* callback = nullptr)
+     {
+          VkDebugReportCallbackCreateInfoEXT create_info = {};
 
-    return bool(*this);
-  }
+          //TODO: Implement this
+          create_info.sType       = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
+          create_info.flags       = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
+          create_info.pfnCallback = debug_callback;
 
-  void instance::destroy()
-  {
-    if (m_instance != VK_NULL_HANDLE) {
-      vkDestroyInstance(m_instance, nullptr);
-      m_instance = VK_NULL_HANDLE;
-      m_has_init = false;
-    }
-  }
 
-  // does not need created instance to be called
-  std::vector<VkExtensionProperties> instance::extensions() const
-  {
-    uint32_t ext_count;
-    vkEnumerateInstanceExtensionProperties(nullptr, &ext_count, nullptr);
-    
-    std::vector<VkExtensionProperties> extensions(ext_count);
-    vkEnumerateInstanceExtensionProperties(nullptr, &ext_count, extensions.data());
+     }
 
-    return extensions;
-  }
+     bool instance::create(const std::vector<const char*>* enabled_layers)
+     {
+          if (enabled_layers
+              && check_validation_layer_support(*enabled_layers) == false) {
+               throw std::runtime_error(
+                    "validation layers are requested but not available!");
+          }
 
-  std::vector<std::string> instance::extension_names() const
-  {
-    auto extensions = this->extensions();
-    std::vector<std::string> names(extensions.size());
+          uint32_t glfwExtensionCount = 0;
+          const char** glfwExtensions = nullptr;
+          //consider replacing with get_required_extensions()
+          glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-    std::transform(extensions.begin(), extensions.end(), names.begin(), 
-      [](const VkExtensionProperties& p) {
-      return p.extensionName;
-    });
+          //check which extensions does glfw need that isn't supported
+          auto instance_ext_names = extension_names();
+          for (size_t i = 0; i < glfwExtensionCount; i++) {
+               bool exists = false;
+               for (const auto& elem : instance_ext_names) {
+                    if (elem == glfwExtensions[i]) { exists = true; }
+               }
+               if (exists == false) {
+                    std::cerr << glfwExtensions[i]
+                              << " is not supported."
+                              << std::endl;
+               }
+          }
 
-    return names;
-  }
+          VkApplicationInfo app_info = default_appinfo();
+
+          VkInstanceCreateInfo create_info = {};
+
+          create_info.sType            = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+          create_info.pApplicationInfo = &app_info;
+
+          auto extensions = get_required_extensions(enabled_layers ? true : false);
+
+          create_info.enabledExtensionCount   = static_cast<uint32_t>(extensions.size());
+          create_info.ppEnabledExtensionNames = extensions.data();
+          create_info.enabledLayerCount       = 0;
+
+          if (enabled_layers) {
+               create_info.enabledLayerCount   = static_cast<uint32_t>(enabled_layers->size());
+               create_info.ppEnabledLayerNames = enabled_layers->data();
+          }
+          else {
+               create_info.enabledLayerCount = 0;
+          }
+
+          // https://www.khronos.org/registry/vulkan/specs/1.0/man/html/vkCreateInstance.html
+          m_result = vkCreateInstance(&create_info, nullptr, &m_instance);
+          m_has_init = true;
+
+          return bool(*this);
+     }
+
+     void instance::destroy()
+     {
+          if (m_instance != VK_NULL_HANDLE) {
+               vkDestroyInstance(m_instance, nullptr);
+               m_instance = VK_NULL_HANDLE;
+               m_has_init = false;
+          }
+     }
+
+     // does not need created instance to be called
+     std::vector<VkExtensionProperties> instance::extensions() const
+     {
+          uint32_t ext_count;
+          vkEnumerateInstanceExtensionProperties(nullptr, &ext_count, nullptr);
+
+          std::vector<VkExtensionProperties> extensions(ext_count);
+          vkEnumerateInstanceExtensionProperties(nullptr,
+                                                 &ext_count,
+                                                 extensions.data());
+
+          return extensions;
+     }
+
+     std::vector<const char*> instance::extension_names() const
+     {
+          auto extensions = this->extensions();
+          std::vector<const char*> names(extensions.size());
+
+          std::transform(extensions.begin(), extensions.end(), names.begin(),
+                         [](const VkExtensionProperties& p) {
+                              return p.extensionName;
+                         });
+
+          return names;
+     }
 
 }

@@ -6,22 +6,22 @@ struct GLFWwindow;
 
 namespace shiny {
 
-  class renderer
-  {
-  public:
-    renderer();
-    ~renderer();
+     class renderer
+     {
+     public:
+          renderer();
+          ~renderer();
 
-    void init();
-    void draw();
+          void init();
+          void draw();
 
-  private:
+     private:
 
-    // used in place of throwing exceptions
-    bool m_bad_init;
+          // used in place of throwing exceptions
+          bool m_bad_init;
 
-    graphic::vk::instance m_instance;
+          graphic::vk::instance m_instance;
 
-  };
+     };
 
 }
