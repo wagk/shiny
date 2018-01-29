@@ -19,14 +19,6 @@ namespace {
      };
 #endif
 
-     void setup_debug_callback()
-     {
-     }
-
-     void teardown_debug_callback()
-     {
-     }
-
 }
 
 namespace shiny {
@@ -38,7 +30,6 @@ namespace shiny {
 
      renderer::~renderer()
      {
-          teardown_debug_callback();
           m_instance.destroy();
      }
 
@@ -50,7 +41,7 @@ namespace shiny {
                throw std::runtime_error("failed to create instance!");
           }
 
-          setup_debug_callback();
+          m_instance.enable_debug_reporting();
      }
 
      void renderer::draw()

@@ -8,12 +8,12 @@
 
 namespace {
 
-     //Finds the debugcallback extension if it exists
+     //Finds the debugcallback extension if it exists, and returns the pointer to that extension function
      VkResult create_debug_report_callback_ext(
           VkInstance                                instance,
           const VkDebugReportCallbackCreateInfoEXT* p_create_info,
-          const VkAllocationCallbacks*              p_allocator,
-          VkDebugReportCallbackEXT*                 p_callback)
+          VkDebugReportCallbackEXT*                 p_callback,
+          const VkAllocationCallbacks*              p_allocator = nullptr)
      {
           auto func = (PFN_vkCreateDebugReportCallbackEXT)
                vkGetInstanceProcAddr(instance, "vkCreateDebugReportCallbackEXT");
@@ -24,6 +24,18 @@ namespace {
           else {
                return VK_ERROR_EXTENSION_NOT_PRESENT;
           }
+     }
+
+     void destroy_debug_report_callback_ext(
+         VkInstance instance, 
+         VkDebugReportCallbackEXT callback, 
+         const VkAllocationCallbacks* p_allocator = nullptr)
+     {
+         auto func = (PFN_vkDestroyDebugReportCallbackEXT) 
+             vkGetInstanceProcAddr(instance, "vkDestroyDebugReportCallbackEXT");
+         if (func != nullptr) {
+             func(instance, callback, p_allocator);
+         }
      }
 
 
@@ -37,7 +49,7 @@ namespace {
           vkEnumerateInstanceLayerProperties(&layer_count,
                                              available_layers.data());
 
-          for (const auto& layer_name : layers) {
+          for (const std::string& layer_name : layers) {
                bool available = false;
                for (const auto& elem : available_layers) {
                     if (elem.layerName == layer_name) { available = true; }
@@ -112,12 +124,14 @@ namespace shiny::graphic::vk {
           destroy();
      }
 
+     // allows the wrapper object to pretend it's an instance
      instance::operator VkInstance() const
      {
           return m_instance;
      }
 
-     void instance::enable_debug_reporting(VkDebugReportCallbackEXT* callback = nullptr)
+     // Registers a callback for debugging, saves the opaque handle
+     void instance::enable_debug_reporting()
      {
           VkDebugReportCallbackCreateInfoEXT create_info = {};
 
@@ -126,7 +140,16 @@ namespace shiny::graphic::vk {
           create_info.flags       = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
           create_info.pfnCallback = debug_callback;
 
+          if (create_debug_report_callback_ext(m_instance, &create_info, &m_callback) != VK_SUCCESS) {
+              throw std::runtime_error("Failed to setup debug callback!");
+          }
+     }
 
+     // deregisters the callback, and resets the state
+     void instance::disable_debug_reporting()
+     {
+         destroy_debug_report_callback_ext(m_instance, m_callback);
+         m_callback = nullptr;
      }
 
      bool instance::create(const std::vector<const char*>* enabled_layers)
@@ -186,11 +209,13 @@ namespace shiny::graphic::vk {
 
      void instance::destroy()
      {
-          if (m_instance != VK_NULL_HANDLE) {
-               vkDestroyInstance(m_instance, nullptr);
-               m_instance = VK_NULL_HANDLE;
-               m_has_init = false;
-          }
+         if (m_callback) 
+             disable_debug_reporting();
+         if (m_instance != VK_NULL_HANDLE) {
+             vkDestroyInstance(m_instance, nullptr);
+             m_instance = VK_NULL_HANDLE;
+             m_has_init = false;
+         }
      }
 
      // does not need created instance to be called

@@ -41,7 +41,7 @@ namespace shiny::graphic::vk {
 
           std::vector<const char*> extension_names() const;
 
-          void enable_debug_reporting(VkDebugReportCallbackEXT* callback = nullptr);
+          void enable_debug_reporting();
           void disable_debug_reporting();
 
      private:
