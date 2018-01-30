@@ -80,7 +80,7 @@ namespace {
      }
 }
 
-namespace shiny::graphic::vk {
+namespace shiny::vk {
 
      VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
           VkDebugReportFlagsEXT      flags,
@@ -169,7 +169,7 @@ namespace shiny::graphic::vk {
           auto instance_ext_names = extension_names();
           for (size_t i = 0; i < glfwExtensionCount; i++) {
                bool exists = false;
-               for (const auto& elem : instance_ext_names) {
+               for (const std::string& elem : instance_ext_names) {
                     if (elem == glfwExtensions[i]) { exists = true; }
                }
                if (exists == false) {

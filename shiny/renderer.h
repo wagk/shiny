@@ -20,7 +20,7 @@ namespace shiny {
           // used in place of throwing exceptions
           bool m_bad_init;
 
-          graphic::vk::instance m_instance;
+          vk::instance m_instance;
 
      };
 

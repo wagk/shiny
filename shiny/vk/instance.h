@@ -10,7 +10,7 @@
 #include <vector>
 #include <string>
 
-namespace shiny::graphic::vk {
+namespace shiny::vk {
 
      // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Validation_layers
      VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
