@@ -42,6 +42,8 @@ namespace shiny {
           }
 
           m_instance.enable_debug_reporting();
+
+        
      }
 
      void renderer::draw()
