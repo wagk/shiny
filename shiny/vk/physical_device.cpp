@@ -48,6 +48,9 @@ namespace shiny::vk {
      {
           queue_family_indices indices;
 
+          uint32_t queue_family_count = 0;
+          vkGetPhysicalDeviceQueueFamilyProperties(m_device, &queue_family_count, nullptr);
+
           return indices;
      }
 
