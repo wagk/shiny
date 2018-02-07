@@ -1,4 +1,5 @@
 #include <vk/instance.h>
+#include <vk/utils.h>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW\glfw3.h>
@@ -41,12 +42,7 @@ namespace {
     //checks if given layers are supported by the instance
     bool check_validation_layer_support(const std::vector<const char*>& layers)
     {
-        uint32_t layer_count;
-        vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
-
-        std::vector<VkLayerProperties> available_layers(layer_count);
-        vkEnumerateInstanceLayerProperties(&layer_count,
-            available_layers.data());
+        auto available_layers = shiny::vk::collect<VkLayerProperties>(vkEnumerateInstanceLayerProperties);
 
         for (const std::string& layer_name : layers) {
             bool available = false;
@@ -222,21 +218,13 @@ namespace shiny::vk {
     // does not need created instance to be called
     std::vector<VkExtensionProperties> instance::extensions() const
     {
-        uint32_t ext_count;
-        vkEnumerateInstanceExtensionProperties(nullptr, &ext_count, nullptr);
-
-        std::vector<VkExtensionProperties> extensions(ext_count);
-        vkEnumerateInstanceExtensionProperties(nullptr,
-            &ext_count,
-            extensions.data());
-
-        return extensions;
+        return collect<VkExtensionProperties>(vkEnumerateInstanceExtensionProperties, nullptr);
     }
 
-    std::vector<const char*> instance::extension_names() const
+    std::vector<std::string> instance::extension_names() const
     {
         auto extensions = this->extensions();
-        std::vector<const char*> names(extensions.size());
+        std::vector<std::string> names(extensions.size());
 
         std::transform(extensions.begin(), extensions.end(), names.begin(),
             [](const VkExtensionProperties& p) {

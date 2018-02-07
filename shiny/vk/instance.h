@@ -38,7 +38,7 @@ namespace shiny::vk {
         bool create(const std::vector<const char*>* enabled_layers = nullptr);
         void destroy();
 
-        std::vector<const char*> extension_names() const;
+        std::vector<std::string> extension_names() const;
 
         void enable_debug_reporting();
         void disable_debug_reporting();
