@@ -1,5 +1,5 @@
-#include "logical_device.h"
-#include "../renderer.h"
+#include <vk/logical_device.h>
+#include <renderer.h>
 
 namespace shiny {
     void vk::logical_device::create_logical_device(renderer* iRenderer, bool enableValidationLayers, std::vector<const char*> validation_layers) {

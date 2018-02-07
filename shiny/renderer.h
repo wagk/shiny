@@ -1,8 +1,8 @@
 #pragma once
 
-#include "vk/instance.h"
-#include "vk/physical_device.h"
-#include "vk/logical_device.h"
+#include <vk/instance.h>
+#include <vk/physical_device.h>
+#include <vk/logical_device.h>
 
 struct GLFWwindow;
 

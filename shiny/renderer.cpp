@@ -1,4 +1,4 @@
-#include "./renderer.h"
+#include <renderer.h>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -48,6 +48,7 @@ namespace shiny {
 
     void renderer::draw()
     {
+        //stub function
         return;
     }
 

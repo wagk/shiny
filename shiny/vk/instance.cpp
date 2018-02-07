@@ -1,4 +1,4 @@
-#include "./instance.h"
+#include <vk/instance.h>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW\glfw3.h>
@@ -21,9 +21,8 @@ namespace {
         if (func != nullptr) {
             return func(instance, p_create_info, p_allocator, p_callback);
         }
-        else {
-            return VK_ERROR_EXTENSION_NOT_PRESENT;
-        }
+
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
 
     void destroy_debug_report_callback_ext(
@@ -52,7 +51,9 @@ namespace {
         for (const std::string& layer_name : layers) {
             bool available = false;
             for (const auto& elem : available_layers) {
-                if (elem.layerName == layer_name) { available = true; }
+                if (elem.layerName == layer_name) { 
+                    available = true; 
+                }
             }
             if (available == false) {
                 return false;

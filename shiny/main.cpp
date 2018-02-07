@@ -2,10 +2,10 @@
 #include <GLFW/glfw3.h>
 #include <FreeImage.h>
 
-#include "vk/instance.h"
+#include <vk/instance.h>
 
-#include "window.h"
-#include "renderer.h"
+#include <window.h>
+#include <renderer.h>
 
 #include <iostream>
 #include <stdexcept>

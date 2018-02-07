@@ -1,7 +1,7 @@
 #pragma once
 
-#include "vulkan\vulkan.h"
-#include "instance.h"
+#include <vulkan\vulkan.h>
+#include <vk/instance.h>
 
 namespace shiny::vk {
 
