@@ -42,13 +42,4 @@ namespace shiny::vk {
         //not have fancy features
         return true;
     }
-
-    physical_device::physical_device()
-    {
-    }
-
-    physical_device::~physical_device()
-    {
-    }
-
 }
