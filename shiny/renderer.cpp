@@ -24,7 +24,8 @@ namespace {
 namespace shiny {
 
      renderer::renderer()
-          : m_bad_init(false)
+          : m_bad_init(false),
+            m_logical_device(this)
      {
      }
 
@@ -51,4 +52,14 @@ namespace shiny {
           return;
      }
 
+     renderer::queue_family_indices
+     renderer::find_queue_families(VkPhysicalDevice device) const
+     {
+         queue_family_indices indices;
+
+         uint32_t queue_family_count = 0;
+         vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
+
+         return indices;
+     }
 }

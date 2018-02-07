@@ -128,6 +128,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="renderer.cpp" />
     <ClCompile Include="vk\instance.cpp" />
+    <ClCompile Include="vk\logical_device.cpp" />
     <ClCompile Include="vk\physical_device.cpp" />
     <ClCompile Include="window.cpp" />
   </ItemGroup>
@@ -296,6 +297,7 @@
     <ClInclude Include="include\vulkan\vulkan.hpp" />
     <ClInclude Include="renderer.h" />
     <ClInclude Include="vk\instance.h" />
+    <ClInclude Include="vk\logical_device.h" />
     <ClInclude Include="vk\physical_device.h" />
     <ClInclude Include="window.h" />
   </ItemGroup>

@@ -43,17 +43,6 @@ namespace shiny::vk {
           return true;
      }
 
-     physical_device::queue_family_indices
-     physical_device::find_queue_families(VkPhysicalDevice device) const
-     {
-          queue_family_indices indices;
-
-          uint32_t queue_family_count = 0;
-          vkGetPhysicalDeviceQueueFamilyProperties(m_device, &queue_family_count, nullptr);
-
-          return indices;
-     }
-
      physical_device::physical_device()
      {
      }
