@@ -1,10 +1,11 @@
 #include <vk/logical_device.h>
+#include <vk/physical_device.h>
 #include <renderer.h>
 
 namespace shiny {
     void vk::logical_device::create_logical_device(renderer* iRenderer, bool enableValidationLayers, std::vector<const char*> validation_layers) {
         VkPhysicalDevice mVPD = iRenderer->get_physical_device()->get_vk_physical_device();
-        renderer::queue_family_indices indices = iRenderer->find_queue_families(mVPD);
+        queue_family_indices indices = find_queue_families(mVPD);
 
         VkDeviceQueueCreateInfo queueCreateInfo = {};
         queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;

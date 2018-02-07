@@ -51,15 +51,4 @@ namespace shiny {
         //stub function
         return;
     }
-
-    renderer::queue_family_indices
-        renderer::find_queue_families(VkPhysicalDevice device) const
-    {
-        queue_family_indices indices;
-
-        uint32_t queue_family_count = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
-
-        return indices;
-    }
 }

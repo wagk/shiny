@@ -21,17 +21,6 @@ namespace shiny {
         vk::physical_device* get_physical_device() { return &m_physical_device; }
         VkQueue& get_graphics_queue() { return m_graphics_queue; }
 
-
-        struct queue_family_indices {
-            int graphics_family = -1;
-
-            bool is_complete() const {
-                return graphics_family >= 0;
-            }
-
-        };
-        queue_family_indices find_queue_families(VkPhysicalDevice device) const;
-
     private:
 
         // used in place of throwing exceptions

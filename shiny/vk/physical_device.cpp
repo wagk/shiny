@@ -1,18 +1,37 @@
 #include <vk/physical_device.h>
 
+#include <vk/utils.h>
+
 namespace shiny::vk {
 
-    bool physical_device::select_physical_device(const instance& inst)
+    queue_family_indices find_queue_families(VkPhysicalDevice device)
     {
-        uint32_t device_count = 0;
-        vkEnumeratePhysicalDevices(inst, &device_count, nullptr);
+        queue_family_indices indices;
 
-        if (device_count == 0) {
-            throw std::runtime_error("Failed to find a GPU with vulkan support!");
+        auto queue_families = collect<VkQueueFamilyProperties>(vkGetPhysicalDeviceQueueFamilyProperties, device);
+
+        //we just want to find one card with VK_QUEUE_GRAPHICS_BIT
+        int i = 0;
+        for (const auto& queue_family : queue_families) {
+            if (queue_family.queueCount > 0 &&
+                queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+                indices.graphics_family = i;
+            }
+            if (indices.is_complete())
+                break;
+            ++i;
         }
 
-        std::vector<VkPhysicalDevice> devices(device_count);
-        vkEnumeratePhysicalDevices(inst, &device_count, devices.data());
+        return indices;
+    }
+
+    void physical_device::select_physical_device(const instance& inst)
+    {
+        auto devices = collect<VkPhysicalDevice>(vkEnumeratePhysicalDevices, inst);
+
+        if (devices.empty()) {
+            throw std::runtime_error("Failed to find a GPU with vulkan support!");
+        }
 
         for (const auto& device : devices) {
             if (is_device_suitable(device)) {
@@ -28,18 +47,7 @@ namespace shiny::vk {
 
     bool physical_device::is_device_suitable(VkPhysicalDevice device) const
     {
-        // VkPhysicalDeviceProperties device_properties;
-        // vkGetPhysicalDeviceProperties(m_device, &device_properties);
-
-        // VkPhysicalDeviceFeatures device_features;
-        // vkGetPhysicalDeviceFeatures(m_device, &device_features);
-
-        // return
-        //      device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
-        //      device_features.geometryShader;
-
-        //currently just return true since we only need it to support vulkan,
-        //not have fancy features
-        return true;
+        queue_family_indices indices = find_queue_families(device);
+        return indices.is_complete();
     }
 }
