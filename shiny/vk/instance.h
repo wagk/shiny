@@ -11,48 +11,48 @@
 
 namespace shiny::vk {
 
-     // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Validation_layers
-     VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
-          VkDebugReportFlagsEXT      flags,
-          VkDebugReportObjectTypeEXT obj_type,
-          uint64_t                   obj,
-          size_t                     location,
-          int32_t                    code,
-          const char*                layer_prefix,
-          const char*                msg,
-          void*                      user_data);
+    // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Validation_layers
+    VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
+        VkDebugReportFlagsEXT      flags,
+        VkDebugReportObjectTypeEXT obj_type,
+        uint64_t                   obj,
+        size_t                     location,
+        int32_t                    code,
+        const char*                layer_prefix,
+        const char*                msg,
+        void*                      user_data);
 
-     VkApplicationInfo default_appinfo();
+    VkApplicationInfo default_appinfo();
 
-     class instance
-     {
-     public:
-          instance();
-          instance(const instance&) = delete;
-          ~instance();
+    class instance
+    {
+    public:
+        instance();
+        instance(const instance&) = delete;
+        ~instance();
 
-          operator VkInstance() const;
+        operator VkInstance() const;
 
-          // if there are validation layers (ie, not nullptr or empty vector), we assume that
-          // debug callbacks are turned on, since that's what the tutorial does
-          bool create(const std::vector<const char*>* enabled_layers = nullptr);
-          void destroy();
+        // if there are validation layers (ie, not nullptr or empty vector), we assume that
+        // debug callbacks are turned on, since that's what the tutorial does
+        bool create(const std::vector<const char*>* enabled_layers = nullptr);
+        void destroy();
 
-          std::vector<const char*> extension_names() const;
+        std::vector<const char*> extension_names() const;
 
-          void enable_debug_reporting();
-          void disable_debug_reporting();
+        void enable_debug_reporting();
+        void disable_debug_reporting();
 
-     private:
+    private:
 
-          std::vector<VkExtensionProperties> extensions() const;
+        std::vector<VkExtensionProperties> extensions() const;
 
-          VkInstance m_instance;
-          VkResult   m_result;
+        VkInstance m_instance;
+        VkResult   m_result;
 
-          VkDebugReportCallbackEXT m_callback = nullptr;
+        VkDebugReportCallbackEXT m_callback = nullptr;
 
-          bool m_has_init;
+        bool m_has_init;
 
-     };
+    };
 }
