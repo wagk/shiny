@@ -13,8 +13,11 @@
 int main() {
 
     try {
-        shiny::window window; window.init();
-        shiny::renderer renderer; renderer.init();
+        shiny::window window; 
+        window.init();
+
+        shiny::renderer renderer; 
+        renderer.init();
 
         while (window.close_window() == false) {
             window.poll_events();
