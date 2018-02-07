@@ -539,6 +539,9 @@
     <ClInclude Include="vk\logical_device.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="vk\utils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="include\glm\detail\func_common.inl">

@@ -311,6 +311,7 @@
     <ClInclude Include="vk\instance.h" />
     <ClInclude Include="vk\logical_device.h" />
     <ClInclude Include="vk\physical_device.h" />
+    <ClInclude Include="vk\utils.h" />
     <ClInclude Include="window.h" />
   </ItemGroup>
   <ItemGroup>
