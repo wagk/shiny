@@ -1,16 +1,10 @@
 #include "logical_device.h"
+#include "../renderer.h"
 
-namespace shiny::vk {
-    logical_device::logical_device(renderer* iRenderer){
-        mRenderer = iRenderer;
-    }
-
-    logical_device::~logical_device(){
-    }
-
-    void logical_device::create_logical_device(bool enableValidationLayers, std::vector<const char*> validation_layers){
-        VkPhysicalDevice mVPD = mRenderer->get_physical_device()->get_vk_physical_device();
-        renderer::queue_family_indices indices = mRenderer->find_queue_families(mVPD);
+namespace shiny {
+    void vk::logical_device::create_logical_device(renderer* iRenderer, bool enableValidationLayers, std::vector<const char*> validation_layers){
+        VkPhysicalDevice mVPD = iRenderer->get_physical_device()->get_vk_physical_device();
+        renderer::queue_family_indices indices = iRenderer->find_queue_families(mVPD);
 
         VkDeviceQueueCreateInfo queueCreateInfo = {};
         queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -44,6 +38,12 @@ namespace shiny::vk {
             throw std::runtime_error("failed to create logical device!");
         }
 
-        vkGetDeviceQueue(m_device, indices.graphics_family, 0, &(mRenderer->get_graphics_queue()));
+        vkGetDeviceQueue(m_device, indices.graphics_family, 0, &(iRenderer->get_graphics_queue()));
+    }
+
+    vk::logical_device::logical_device() {
+    }
+
+    vk::logical_device::~logical_device() {
     }
 }

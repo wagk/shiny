@@ -24,8 +24,7 @@ namespace {
 namespace shiny {
 
      renderer::renderer()
-          : m_bad_init(false),
-            m_logical_device(this)
+          : m_bad_init(false)
      {
      }
 
