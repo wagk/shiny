@@ -3,21 +3,24 @@
 #include <vulkan\vulkan.h>
 #include <vector>
 
-namespace shiny {
-    class renderer;
-}
+#include <vk\physical_device.h>
 
 namespace shiny::vk {
-    // forward decl
+
     class logical_device
     {
     public:
-        logical_device();
-        ~logical_device();
 
-        void create_logical_device(renderer* iRenderer, bool enableValidationLayers, std::vector<const char*> validation_layers);
+        explicit logical_device() = default;
+
+        void create(const physical_device& device);
 
     private:
+
         VkDevice m_device;
+
     };
+
+    //device is the common term, not logical_device, even though logical_device is factually correct
+    using device = logical_device;
 }

@@ -23,11 +23,6 @@ namespace {
 
 namespace shiny {
 
-    renderer::renderer()
-        : m_bad_init(false)
-    {
-    }
-
     renderer::~renderer()
     {
         m_instance.destroy();
@@ -37,13 +32,12 @@ namespace shiny {
     void renderer::init()
     {
         if (m_instance.create(&validation_layers) == false) {
-            m_bad_init = true; // why do this again?
             throw std::runtime_error("failed to create instance!");
         }
 
         m_instance.enable_debug_reporting();
 
-
+        m_physical_device.select_physical_device(m_instance);
     }
 
     void renderer::draw()

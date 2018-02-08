@@ -20,10 +20,14 @@ namespace shiny::vk {
     {
     public:
 
+        explicit physical_device() = default;
+
         void select_physical_device(const instance& inst);
-        VkPhysicalDevice& get_vk_physical_device() { return m_device; }
+
+        operator VkPhysicalDevice() const { return m_device; }
 
     private:
+
         bool is_device_suitable(VkPhysicalDevice device) const;
 
         VkPhysicalDevice m_device = VK_NULL_HANDLE;
