@@ -1,0 +1,71 @@
+# https://clang.llvm.org/docs/ClangFormatStyleOptions.html
+
+BasedOnStyle: Mozilla
+IndentWidth: 4
+UseTab: Never
+ColumnLimit: 80
+Language: Cpp
+Standard: Cpp11
+
+# public: private: gets no indentation
+AccessModifierOffset : -4
+
+# Arguments should align according to brackets
+AlignAfterOpenBracket : Align
+AlignConsecutiveAssignments : true
+AlignConsecutiveDeclarations : true
+AlignEscapedNewlines : Left
+AlignOperands : true
+AlignTrailingComments : true
+
+AllowAllParametersOfDeclarationOnNextLine : false
+AllowShortBlocksOnASingleLine : true
+AllowShortCaseLabelsOnASingleLine : false
+AllowShortFunctionsOnASingleLine : InlineOnly
+AllowShortIfStatementsOnASingleLine : false
+AllowShortLoopsOnASingleLine : false
+
+AlwaysBreakAfterReturnType : None
+AlwaysBreakBeforeMultilineStrings : true
+AlwaysBreakTemplateDeclarations : true
+
+BinPackArguments : true
+BinPackParameters : false
+
+BreakBeforeBinaryOperators : NonAssignment
+BreakBeforeBraces : Mozilla
+BreakBeforeInheritanceComma : false
+BreakBeforeTernaryOperators : true
+BreakConstructorInitializers : BeforeComma
+
+CompactNamespaces : false
+FixNamespaceComments : true
+NamespaceIndentation : Inner
+ConstructorInitializerAllOnOneLineOrOnePerLine : false
+
+Cpp11BracedListStyle : false
+
+IncludeBlocks : Regroup
+
+IndentCaseLabels : false
+IndentWrappedFunctionNames : false
+MaxEmptyLinesToKeep : 2
+
+PointerAlignment : Left
+
+ReflowComments : true
+
+SortIncludes : true
+SortUsingDeclarations : true
+
+SpaceAfterCStyleCast : false
+SpaceAfterTemplateKeyword : false
+SpaceBeforeAssignmentOperators : true
+SpaceBeforeParens : ControlStatements
+SpaceInEmptyParentheses : false
+SpacesBeforeTrailingComments : 2
+SpacesInAngles : false
+SpacesInCStyleCastParentheses : false
+SpacesInContainerLiterals : true
+SpacesInParentheses : false
+SpacesInSquareBrackets : false
