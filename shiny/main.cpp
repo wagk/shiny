@@ -1,29 +1,27 @@
 #define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
 #include <FreeImage.h>
-
-#include <vk/instance.h>
-
-#include <window.h>
-#include <renderer.h>
-
+#include <GLFW/glfw3.h>
 #include <iostream>
+#include <renderer.h>
 #include <stdexcept>
+#include <vk/instance.h>
+#include <window.h>
 
-int main() {
+int
+main()
+{
 
     try {
-        shiny::window window; 
+        shiny::window window;
         window.init();
 
-        shiny::renderer renderer; 
+        shiny::renderer renderer;
         renderer.init();
 
         while (window.close_window() == false) {
             window.poll_events();
         }
-    }
-    catch (const std::runtime_error& e) {
+    } catch (const std::runtime_error& e) {
         std::cerr << e.what() << std::endl;
         return EXIT_FAILURE;
     }

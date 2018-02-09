@@ -1,35 +1,31 @@
 #pragma once
 
-#include <vulkan\vulkan.h>
 #include <vk/instance.h>
+#include <vulkan\vulkan.h>
 
 namespace shiny::vk {
 
-    struct queue_family_indices {
-        int graphics_family = -1;
+struct queue_family_indices
+{
+    int graphics_family = -1;
 
-        bool is_complete() const {
-            return graphics_family >= 0;
-        }
+    bool is_complete() const { return graphics_family >= 0; }
+};
 
-    };
+queue_family_indices find_queue_families(VkPhysicalDevice device);
 
-    queue_family_indices find_queue_families(VkPhysicalDevice device);
+class physical_device
+{
+public:
+    explicit physical_device() = default;
 
-    class physical_device
-    {
-    public:
+    void select_physical_device(const instance& inst);
 
-        explicit physical_device() = default;
+    operator VkPhysicalDevice() const { return m_device; }
 
-        void select_physical_device(const instance& inst);
+private:
+    bool is_device_suitable(VkPhysicalDevice device) const;
 
-        operator VkPhysicalDevice() const { return m_device; }
-
-    private:
-
-        bool is_device_suitable(VkPhysicalDevice device) const;
-
-        VkPhysicalDevice m_device = VK_NULL_HANDLE;
-    };
-}
+    VkPhysicalDevice m_device = VK_NULL_HANDLE;
+};
+}  // namespace shiny::vk
