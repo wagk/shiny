@@ -18,5 +18,5 @@ developing:
 
 
 
-1: https://marketplace.visualstudio.com/items?itemName=LLVMExtensions.ClangFormat
-2: https://marketplace.visualstudio.com/items?itemName=vs-publisher-690586.ClangPowerTools
+[1]: https://marketplace.visualstudio.com/items?itemName=LLVMExtensions.ClangFormat
+[2]: https://marketplace.visualstudio.com/items?itemName=vs-publisher-690586.ClangPowerTools
