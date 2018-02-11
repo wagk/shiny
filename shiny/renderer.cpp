@@ -20,6 +20,18 @@ const std::vector<const char*> validation_layers       = { "VK_LAYER_LUNARG_stan
 
 namespace shiny {
 
+renderer&
+renderer::singleton()
+{
+    static renderer single;
+    return single;
+}
+
+renderer::renderer()
+{
+    init();
+}
+
 renderer::~renderer()
 {
     m_logical_device.destroy();
@@ -31,6 +43,7 @@ renderer::~renderer()
 void
 renderer::init()
 {
+    m_window.init();
     if (m_instance.create(&validation_layers) == false) {
         throw std::runtime_error("failed to create instance!");
     }

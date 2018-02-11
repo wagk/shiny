@@ -13,14 +13,8 @@ int
 main()
 {
     try {
-        shiny::window window;
-        window.init();
-
-        shiny::renderer renderer;
-        renderer.init();
-
-        while (window.close_window() == false) {
-            window.poll_events();
+        while (shiny::renderer::singleton().glfw_window().close_window() == false) {
+            shiny::renderer::singleton().glfw_window().poll_events();
         }
     } catch (const std::runtime_error& e) {
         std::cerr << e.what() << std::endl;
