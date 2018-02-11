@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vk/ext/surface.h>
 #include <vk/instance.h>
 #include <vk/logical_device.h>
 #include <vk/physical_device.h>
@@ -26,6 +27,7 @@ private:
     vk::instance        m_instance;
     vk::physical_device m_physical_device;
     vk::logical_device  m_logical_device;
+    vk::ext::surface    m_surface;
 };
 
 }  // namespace shiny

@@ -34,6 +34,7 @@ renderer::renderer()
 
 renderer::~renderer()
 {
+    m_surface.destroy();
     m_logical_device.destroy();
     // physical devices have no destroy function for some reason
     m_instance.destroy();
@@ -53,6 +54,8 @@ renderer::init()
     m_physical_device.select_physical_device(m_instance);
     m_logical_device.create(m_physical_device, &validation_layers);
     vk::queue m_queue = m_logical_device.get_queue();
+
+    m_surface.create(m_instance, m_window);
 }
 
 void

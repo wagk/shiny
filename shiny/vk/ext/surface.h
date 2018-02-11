@@ -12,7 +12,9 @@
   once we get through the tutorial and possibly done some refactoring
 */
 
+#include <vk/instance.h>
 #include <vulkan/vulkan.h>
+#include <window.h>
 
 namespace shiny::vk::ext {
 
@@ -23,8 +25,16 @@ public:
     ~surface()       = default;
     surface& operator=(const surface& rhs) = default;
 
+    /*
+      We must pass in a non-const window since the glfw implementation demands a
+      non-const pointer
+    */
+    void create(const instance& instance, window& window);
+    void destroy();
+
 private:
-    VkSurfaceKHR m_surface;
+    const instance* m_instance_ref = nullptr;
+    VkSurfaceKHR    m_surface      = VK_NULL_HANDLE;
 };
 
 }  // namespace shiny::vk::ext
