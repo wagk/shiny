@@ -122,7 +122,7 @@
       </Message>
     </CustomBuildStep>
     <PostBuildEvent>
-      <Command>xcopy /e /v $(ProjectDir)libs\dll $(TargetDir)</Command>
+      <Command>xcopy /e /v /y "$(ProjectDir)libs\dll" "$(TargetDir)"</Command>
     </PostBuildEvent>
     <PostBuildEvent>
       <Message>Copy the dlls over</Message>
@@ -175,7 +175,7 @@
       </Message>
     </CustomBuildStep>
     <PostBuildEvent>
-      <Command>xcopy /e /v $(ProjectDir)libs\dll $(TargetDir)</Command>
+      <Command>xcopy /e /v /y "$(ProjectDir)libs\dll" "$(TargetDir)"</Command>
     </PostBuildEvent>
     <PostBuildEvent>
       <Message>Copy the dlls over</Message>
@@ -188,6 +188,7 @@
     <ClCompile Include="vk\instance.cpp" />
     <ClCompile Include="vk\logical_device.cpp" />
     <ClCompile Include="vk\physical_device.cpp" />
+    <ClCompile Include="vk\queue.cpp" />
     <ClCompile Include="window.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -357,6 +358,7 @@
     <ClInclude Include="vk\instance.h" />
     <ClInclude Include="vk\logical_device.h" />
     <ClInclude Include="vk\physical_device.h" />
+    <ClInclude Include="vk\queue.h" />
     <ClInclude Include="vk\utils.h" />
     <ClInclude Include="window.h" />
   </ItemGroup>

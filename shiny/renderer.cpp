@@ -1,4 +1,5 @@
 #include <renderer.h>
+#include <vk/queue.h>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -12,9 +13,7 @@ const bool                     enable_validation_layer = false;
 const std::vector<const char*> validation_layers       = {};
 #else
 const bool                     enable_validation_layer = true;
-const std::vector<const char*> validation_layers       = {
-    "VK_LAYER_LUNARG_standard_validation"
-};
+const std::vector<const char*> validation_layers       = { "VK_LAYER_LUNARG_standard_validation" };
 #endif
 
 }  // namespace
@@ -23,6 +22,8 @@ namespace shiny {
 
 renderer::~renderer()
 {
+    m_logical_device.destroy();
+    // physical devices have no destroy function for some reason
     m_instance.destroy();
 }
 
@@ -38,6 +39,7 @@ renderer::init()
 
     m_physical_device.select_physical_device(m_instance);
     m_logical_device.create(m_physical_device, &validation_layers);
+    vk::queue m_queue = m_logical_device.get_queue();
 }
 
 void

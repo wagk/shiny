@@ -10,8 +10,8 @@ namespace shiny {
 
 class renderer
 {
+
 public:
-    explicit renderer() = default;
     ~renderer();
 
     void init();
