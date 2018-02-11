@@ -1,16 +1,17 @@
 #define GLFW_INCLUDE_VULKAN
 #include <FreeImage.h>
 #include <GLFW/glfw3.h>
+
 #include <iostream>
-#include <renderer.h>
 #include <stdexcept>
+
+#include <renderer.h>
 #include <vk/instance.h>
 #include <window.h>
 
 int
 main()
 {
-
     try {
         shiny::window window;
         window.init();

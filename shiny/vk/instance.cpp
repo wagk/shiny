@@ -11,11 +11,10 @@ namespace {
 // Finds the debugcallback extension if it exists, and returns the pointer to
 // that extension function
 VkResult
-create_debug_report_callback_ext(
-  VkInstance                                instance,
-  const VkDebugReportCallbackCreateInfoEXT* p_create_info,
-  VkDebugReportCallbackEXT*                 p_callback,
-  const VkAllocationCallbacks*              p_allocator = nullptr)
+create_debug_report_callback_ext(VkInstance                                instance,
+                                 const VkDebugReportCallbackCreateInfoEXT* p_create_info,
+                                 VkDebugReportCallbackEXT*                 p_callback,
+                                 const VkAllocationCallbacks*              p_allocator = nullptr)
 {
     auto func = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
       instance, "vkCreateDebugReportCallbackEXT");
@@ -28,10 +27,9 @@ create_debug_report_callback_ext(
 }
 
 void
-destroy_debug_report_callback_ext(
-  VkInstance                   instance,
-  VkDebugReportCallbackEXT     callback,
-  const VkAllocationCallbacks* p_allocator = nullptr)
+destroy_debug_report_callback_ext(VkInstance                   instance,
+                                  VkDebugReportCallbackEXT     callback,
+                                  const VkAllocationCallbacks* p_allocator = nullptr)
 {
     auto func = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(
       instance, "vkDestroyDebugReportCallbackEXT");
@@ -47,8 +45,7 @@ check_validation_layer_support(const std::vector<const char*>& layers)
 {
     using shiny::vk::collect;
 
-    auto available_layers =
-      collect<VkLayerProperties>(vkEnumerateInstanceLayerProperties);
+    auto available_layers = collect<VkLayerProperties>(vkEnumerateInstanceLayerProperties);
 
     for (const std::string& layer_name : layers) {
         bool available = false;
@@ -69,11 +66,9 @@ std::vector<const char*>
 get_required_extensions(bool enable_validation_layer)
 {
     uint32_t     glfw_extension_count = 0;
-    const char** glfw_extensions =
-      glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+    const char** glfw_extensions      = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
 
-    std::vector<const char*> extensions(glfw_extensions,
-                                        glfw_extensions + glfw_extension_count);
+    std::vector<const char*> extensions(glfw_extensions, glfw_extensions + glfw_extension_count);
 
     // TODO: make this optional/debug only
     extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
@@ -139,13 +134,11 @@ instance::enable_debug_reporting()
     VkDebugReportCallbackCreateInfoEXT create_info = {};
 
     // TODO: Implement this
-    create_info.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-    create_info.flags =
-      VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
+    create_info.sType       = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
+    create_info.flags       = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
     create_info.pfnCallback = debug_callback;
 
-    if (create_debug_report_callback_ext(m_instance, &create_info, &m_callback)
-        != VK_SUCCESS) {
+    if (create_debug_report_callback_ext(m_instance, &create_info, &m_callback) != VK_SUCCESS) {
         throw std::runtime_error("Failed to setup debug callback!");
     }
 }
@@ -161,11 +154,10 @@ instance::disable_debug_reporting()
 bool
 instance::create(const std::vector<const char*>* enabled_layers)
 {
-    if (enabled_layers
-        && check_validation_layer_support(*enabled_layers) == false) {
-        throw std::runtime_error(
-          "validation layers are requested but not available!");
+    if (enabled_layers && check_validation_layer_support(*enabled_layers) == false) {
+        throw std::runtime_error("validation layers are requested but not available!");
     }
+
 
     uint32_t     glfwExtensionCount = 0;
     const char** glfwExtensions     = nullptr;
@@ -195,14 +187,12 @@ instance::create(const std::vector<const char*>* enabled_layers)
 
     auto extensions = get_required_extensions(enabled_layers ? true : false);
 
-    create_info.enabledExtensionCount =
-      static_cast<uint32_t>(extensions.size());
+    create_info.enabledExtensionCount   = static_cast<uint32_t>(extensions.size());
     create_info.ppEnabledExtensionNames = extensions.data();
     create_info.enabledLayerCount       = 0;
 
     if (enabled_layers) {
-        create_info.enabledLayerCount =
-          static_cast<uint32_t>(enabled_layers->size());
+        create_info.enabledLayerCount   = static_cast<uint32_t>(enabled_layers->size());
         create_info.ppEnabledLayerNames = enabled_layers->data();
     } else {
         create_info.enabledLayerCount = 0;
@@ -231,8 +221,7 @@ instance::destroy()
 std::vector<VkExtensionProperties>
 instance::extensions() const
 {
-    return collect<VkExtensionProperties>(
-      vkEnumerateInstanceExtensionProperties, nullptr);
+    return collect<VkExtensionProperties>(vkEnumerateInstanceExtensionProperties, nullptr);
 }
 
 std::vector<std::string>
@@ -242,9 +231,8 @@ instance::extension_names() const
 
     std::vector<std::string> names(extensions.size());
 
-    std::transform(
-      extensions.begin(), extensions.end(), names.begin(),
-      [](const VkExtensionProperties& p) { return p.extensionName; });
+    std::transform(extensions.begin(), extensions.end(), names.begin(),
+                   [](const VkExtensionProperties& p) { return p.extensionName; });
 
     return names;
 }
