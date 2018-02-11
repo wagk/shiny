@@ -39,6 +39,9 @@
     <ClCompile Include="vk\queue.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="vk\ext\surface.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\FreeImage.h">
@@ -546,6 +549,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vk\queue.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vk\ext\surface.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
