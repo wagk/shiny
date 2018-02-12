@@ -1,0 +1,9 @@
+6 Feb 2018
+// Jason: I moved the queue_family_indices stuff to renderer, 
+// because it didn't seem to make sense to require a physical device reference to call a function which passes in itself as an argument.
+// e.g. "mRenderer->find_queue_families(mPhysicalDevice);"
+// instead of "mPhysicalDevice->find_queue_families(mPhysicalDevice);"
+// 
+// I also added a logical_device class, as well as a member pointer for it in renderer.
+// I also changed the member physical_device reference to a pointer. Feel like this is better for passing between classes.
+// Let me know if this is the right call or not.
