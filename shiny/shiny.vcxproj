@@ -190,6 +190,7 @@
     <ClCompile Include="vk\logical_device.cpp" />
     <ClCompile Include="vk\physical_device.cpp" />
     <ClCompile Include="vk\queue.cpp" />
+    <ClCompile Include="vk\queue_families.cpp" />
     <ClCompile Include="window.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -361,6 +362,7 @@
     <ClInclude Include="vk\logical_device.h" />
     <ClInclude Include="vk\physical_device.h" />
     <ClInclude Include="vk\queue.h" />
+    <ClInclude Include="vk\queue_families.h" />
     <ClInclude Include="vk\utils.h" />
     <ClInclude Include="window.h" />
   </ItemGroup>

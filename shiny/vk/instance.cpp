@@ -1,4 +1,5 @@
 #include <vk/instance.h>
+#include <vk/physical_device.h>
 #include <vk/utils.h>
 
 #define GLFW_INCLUDE_VULKAN
@@ -110,49 +111,9 @@ default_appinfo()
     return app_info;
 }
 
-instance::instance()
+instance::instance(const std::vector<const char*>* enabled_layers)
   : m_instance(VK_NULL_HANDLE)
   , m_result(VK_SUCCESS)
-  , m_has_init(false)
-{}
-
-instance::~instance()
-{
-    destroy();
-}
-
-// allows the wrapper object to pretend it's an instance
-instance::operator VkInstance() const
-{
-    return m_instance;
-}
-
-// Registers a callback for debugging, saves the opaque handle
-void
-instance::enable_debug_reporting()
-{
-    VkDebugReportCallbackCreateInfoEXT create_info = {};
-
-    // TODO: Implement this
-    create_info.sType       = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-    create_info.flags       = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
-    create_info.pfnCallback = debug_callback;
-
-    if (create_debug_report_callback_ext(m_instance, &create_info, &m_callback) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to setup debug callback!");
-    }
-}
-
-// deregisters the callback, and resets the state
-void
-instance::disable_debug_reporting()
-{
-    destroy_debug_report_callback_ext(m_instance, m_callback);
-    m_callback = nullptr;
-}
-
-bool
-instance::create(const std::vector<const char*>* enabled_layers)
 {
     if (enabled_layers && check_validation_layer_support(*enabled_layers) == false) {
         throw std::runtime_error("validation layers are requested but not available!");
@@ -199,22 +160,58 @@ instance::create(const std::vector<const char*>* enabled_layers)
     }
 
     // https://www.khronos.org/registry/vulkan/specs/1.0/man/html/vkCreateInstance.html
-    m_result   = vkCreateInstance(&create_info, nullptr, &m_instance);
-    m_has_init = true;
-
-    return bool(*this);
+    m_result = vkCreateInstance(&create_info, nullptr, &m_instance);
 }
 
-void
-instance::destroy()
+instance::~instance()
 {
     if (m_callback)
         disable_debug_reporting();
     if (m_instance != VK_NULL_HANDLE) {
         vkDestroyInstance(m_instance, nullptr);
-        m_instance = VK_NULL_HANDLE;
-        m_has_init = false;
     }
+}
+
+// Registers a callback for debugging, saves the opaque handle
+void
+instance::enable_debug_reporting()
+{
+    VkDebugReportCallbackCreateInfoEXT create_info = {};
+
+    // TODO: Implement this
+    create_info.sType       = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
+    create_info.flags       = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
+    create_info.pfnCallback = debug_callback;
+
+    if (create_debug_report_callback_ext(m_instance, &create_info, &m_callback) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to setup debug callback!");
+    }
+}
+
+// deregisters the callback, and resets the state
+void
+instance::disable_debug_reporting()
+{
+    destroy_debug_report_callback_ext(m_instance, m_callback);
+    m_callback = nullptr;
+}
+
+physical_device
+instance::select_physical_device() const
+{
+    auto devices = collect<VkPhysicalDevice>(vkEnumeratePhysicalDevices, m_instance);
+
+    if (devices.empty()) {
+        throw std::runtime_error("Failed to find a GPU with vulkan support!");
+    }
+
+    for (physical_device device : devices) {
+        if (device.is_device_suitable()) {
+            return device;
+        }
+    }
+
+    throw std::runtime_error("Failed to find a suitable GPU!");
 }
 
 // does not need created instance to be called

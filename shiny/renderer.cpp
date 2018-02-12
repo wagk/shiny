@@ -29,33 +29,22 @@ renderer::singleton()
 
 renderer::renderer()
 {
-    init();
-}
-
-renderer::~renderer()
-{
-    m_surface.destroy();
-    m_logical_device.destroy();
-    // physical devices have no destroy function for some reason
-    m_instance.destroy();
-}
-
-// analogue for the initVulkan function in the tutorial
-void
-renderer::init()
-{
     m_window.init();
-    if (m_instance.create(&validation_layers) == false) {
+
+    m_instance.emplace(&validation_layers);
+    if (m_instance.value() == false) {
         throw std::runtime_error("failed to create instance!");
     }
 
-    m_instance.enable_debug_reporting();
+    // TODO: Improve this interface
+    m_instance->enable_debug_reporting();
 
-    m_physical_device.select_physical_device(m_instance);
-    m_logical_device.create(m_physical_device, &validation_layers);
-    vk::queue m_queue = m_logical_device.get_queue();
+    m_physical_device.emplace(m_instance->select_physical_device());
+    // m_logical_device.emplace(m_physical_device->create_logical_device(&validation_layers));
+    // m_logical_device.value().print_device_addr();
+    // vk::queue q = m_logical_device->get_queue();
 
-    m_surface.create(m_instance, m_window);
+    // m_surface.create(m_instance, m_window);
 }
 
 void

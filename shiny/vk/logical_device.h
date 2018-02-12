@@ -1,3 +1,4 @@
+#pragma once
 /*
   Logical devices are interfaces to the physical device.
 
@@ -8,21 +9,18 @@
 
 #include <vector>
 
-#include <vk\physical_device.h>
-#include <vk\queue.h>
+#include <vk/queue.h>
+#include <vk/queue_families.h>
+
+#include <iostream>
 
 namespace shiny::vk {
 
 class logical_device
 {
 public:
-    explicit logical_device() = default;
+    explicit logical_device(VkDevice device, const queue_families& indices);
     ~logical_device();
-
-    void create(const physical_device&          device,
-                const std::vector<const char*>* enabled_layers = nullptr);
-
-    void destroy();
 
     /*
       Queues belong to the logical device, they automatically created along with
@@ -30,9 +28,11 @@ public:
     */
     queue get_queue() const;
 
+    void print_device_addr() const { std::cout << m_device << std::endl; }
+
 private:
-    VkDevice             m_device;
-    queue_family_indices m_indices;
+    VkDevice       m_device = VK_NULL_HANDLE;
+    queue_families m_indices;
 };
 
 // device is the common term, not logical_device, even though logical_device is
