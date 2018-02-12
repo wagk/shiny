@@ -3,7 +3,7 @@
 BasedOnStyle: Mozilla
 IndentWidth: 4
 UseTab: Never
-ColumnLimit: 80
+ColumnLimit: 100
 Language: Cpp
 Standard: Cpp11
 
@@ -22,7 +22,7 @@ AllowAllParametersOfDeclarationOnNextLine : false
 AllowShortBlocksOnASingleLine : true
 AllowShortCaseLabelsOnASingleLine : false
 AllowShortFunctionsOnASingleLine : InlineOnly
-AllowShortIfStatementsOnASingleLine : false
+AllowShortIfStatementsOnASingleLine : true
 AllowShortLoopsOnASingleLine : false
 
 AlwaysBreakAfterReturnType : None
@@ -45,7 +45,7 @@ ConstructorInitializerAllOnOneLineOrOnePerLine : false
 
 Cpp11BracedListStyle : false
 
-IncludeBlocks : Regroup
+IncludeBlocks : Preserve
 
 IndentCaseLabels : false
 IndentWrappedFunctionNames : false
