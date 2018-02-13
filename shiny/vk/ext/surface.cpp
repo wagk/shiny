@@ -1,26 +1,34 @@
 #include <vk/ext/surface.h>
+#include <vk/instance.h>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include <utility>
+
 namespace shiny::vk::ext {
 
-void
-surface::create(const instance& instance, window& window)
-{
-    m_instance_ref = &instance;
+surface::surface(const shiny::vk::instance* inst, VkSurfaceKHR surface)
+  : m_instance_ref(inst)
+  , m_surface(surface)
+{}
 
-    if (glfwCreateWindowSurface(*m_instance_ref, window, nullptr, &m_surface) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create window surface!");
-    }
-}
-
-void
-surface::destroy()
+surface::~surface()
 {
     vkDestroySurfaceKHR(*m_instance_ref, m_surface, nullptr);
-    m_instance_ref = nullptr;
-    m_surface      = VK_NULL_HANDLE;
+}
+
+surface::surface(const surface&& sur)
+  : m_instance_ref(std::move(sur.m_instance_ref))
+  , m_surface(std::move(sur.m_surface))
+{}
+
+surface&
+surface::operator=(const surface&& sur)
+{
+    m_instance_ref = std::move(sur.m_instance_ref);
+    m_surface      = std::move(sur.m_surface);
+    return *this;
 }
 
 

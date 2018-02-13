@@ -42,6 +42,7 @@ renderer::renderer()
     m_physical_device.emplace(m_instance->select_physical_device());
     m_logical_device.emplace(m_physical_device->create_logical_device(&validation_layers));
     m_queue.emplace(m_logical_device->get_queue());
+    m_surface.emplace(m_instance->create_surface(m_window));
 
     // m_surface.create(m_instance, m_window);
 }

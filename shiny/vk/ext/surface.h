@@ -1,3 +1,4 @@
+#pragma once
 #ifndef _EXT_SURFACE_h__
 #define _EXT_SURFACE_h__
 
@@ -12,25 +13,25 @@
   once we get through the tutorial and possibly done some refactoring
 */
 
-#include <vk/instance.h>
 #include <vulkan/vulkan.h>
-#include <window.h>
+
+namespace shiny::vk {
+class instance;
+}
 
 namespace shiny::vk::ext {
 
 class surface
 {
 public:
-    surface()        = default;
-    ~surface()       = default;
-    surface& operator=(const surface& rhs) = default;
+    surface(const instance* inst_ref, VkSurfaceKHR m_surface);
+    ~surface();
 
-    /*
-      We must pass in a non-const window since the glfw implementation demands a
-      non-const pointer
-    */
-    void create(const instance& instance, window& window);
-    void destroy();
+    surface(const surface&) = delete;
+    surface& operator=(const surface&) = delete;
+
+    surface(const surface&&);
+    surface& operator=(const surface&& rhs);
 
 private:
     const instance* m_instance_ref = nullptr;

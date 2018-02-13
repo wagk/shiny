@@ -11,7 +11,9 @@
 
 #include <vulkan/vulkan.h>
 
+#include <vk/ext/surface.h>
 #include <vk/physical_device.h>
+#include <window.h>
 
 namespace shiny::vk {
 
@@ -39,7 +41,6 @@ public:
     ~instance();
 
     operator VkInstance() const { return m_instance; }
-    operator VkResult() const { return m_result; }
     operator bool() const { return m_result == VK_SUCCESS; }
 
     std::vector<std::string> extension_names() const;
@@ -48,6 +49,7 @@ public:
     void disable_debug_reporting();
 
     physical_device select_physical_device() const;
+    ext::surface    create_surface(window& context) const;
 
 private:
     std::vector<VkExtensionProperties> extensions() const;

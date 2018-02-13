@@ -230,6 +230,18 @@ instance::select_physical_device() const
     throw std::runtime_error("Failed to find a suitable GPU!");
 }
 
+ext::surface
+instance::create_surface(window& window) const
+{
+    VkSurfaceKHR surface;
+    if (glfwCreateWindowSurface(m_instance, window, nullptr, &surface) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create window surface!");
+    }
+
+    return ext::surface(this, surface);
+}
+
+
 // does not need created instance to be called
 std::vector<VkExtensionProperties>
 instance::extensions() const
