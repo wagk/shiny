@@ -10,12 +10,28 @@ logical_device::logical_device(VkDevice device, const queue_families& indices)
   : m_device(device)
   , m_indices(indices)
 {
-    std::cout << m_device << std::endl;
 }
 
 logical_device::~logical_device()
 {
     vkDestroyDevice(m_device, nullptr);
+}
+
+logical_device::logical_device(logical_device && other)
+	: m_device(other.m_device)
+	, m_indices(other.m_indices)
+{
+	other.m_device = VK_NULL_HANDLE;
+}
+
+logical_device&
+logical_device::operator=(logical_device && other)
+{
+	vkDestroyDevice(m_device, nullptr);
+	m_device       = other.m_device;
+	m_indices      = other.m_indices;
+	other.m_device = nullptr;
+	return *this;
 }
 
 queue

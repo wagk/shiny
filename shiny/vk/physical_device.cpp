@@ -76,9 +76,6 @@ physical_device::create_logical_device(const std::vector<const char*>* enabled_l
         throw std::runtime_error("Failed to create a logical device!");
     }
 
-    // VkQueue device_queue;
-    // vkGetDeviceQueue(device, m_indices.graphics_family, 0, &device_queue);
-
     return logical_device(device, m_indices);
 }
 
