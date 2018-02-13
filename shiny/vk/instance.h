@@ -32,6 +32,10 @@ class instance
 public:
     instance(const std::vector<const char*>* enabled_layers = nullptr);
     instance(const instance&) = delete;
+    instance& operator=(const instance&) = delete;
+
+    instance(const instance&&);
+    instance& operator=(const instance&&);
     ~instance();
 
     operator VkInstance() const { return m_instance; }

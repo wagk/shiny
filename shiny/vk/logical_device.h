@@ -22,19 +22,17 @@ public:
     explicit logical_device(VkDevice device, const queue_families& indices);
     ~logical_device();
 
-	logical_device(const logical_device&) = delete;
-	logical_device& operator=(const logical_device&) = delete;
+    logical_device(const logical_device&) = delete;
+    logical_device& operator=(const logical_device&) = delete;
 
-	logical_device(logical_device&& other);
-	logical_device& operator=(logical_device&& other);
+    logical_device(logical_device&& other);
+    logical_device& operator=(logical_device&& other);
 
     /*
       Queues belong to the logical device, they automatically created along with
       the device, but we need to assign handles to them
     */
     queue get_queue() const;
-
-    void print_device_addr() const { std::cout << m_device << std::endl; }
 
 private:
     VkDevice       m_device = VK_NULL_HANDLE;

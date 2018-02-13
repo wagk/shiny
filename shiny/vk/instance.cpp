@@ -6,6 +6,7 @@
 #include <GLFW\glfw3.h>
 #include <algorithm>
 #include <iostream>
+#include <utility>
 
 namespace {
 
@@ -119,7 +120,6 @@ instance::instance(const std::vector<const char*>* enabled_layers)
         throw std::runtime_error("validation layers are requested but not available!");
     }
 
-
     uint32_t     glfwExtensionCount = 0;
     const char** glfwExtensions     = nullptr;
     // consider replacing with get_required_extensions()
@@ -162,6 +162,22 @@ instance::instance(const std::vector<const char*>* enabled_layers)
     // https://www.khronos.org/registry/vulkan/specs/1.0/man/html/vkCreateInstance.html
     m_result = vkCreateInstance(&create_info, nullptr, &m_instance);
 }
+
+instance::instance(const instance&& inst)
+  : m_instance(inst.m_instance)
+  , m_result(inst.m_result)
+  , m_callback(inst.m_callback)
+{}
+
+instance&
+instance::operator=(const instance&& inst)
+{
+    m_instance = std::move(inst.m_instance);
+    m_result   = std::move(inst.m_result);
+    m_callback = std::move(inst.m_callback);
+    return *this;
+}
+
 
 instance::~instance()
 {
