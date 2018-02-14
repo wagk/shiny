@@ -29,6 +29,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugReportFlagsEXT      flags,
 
 VkApplicationInfo default_appinfo();
 
+/*
+  Instances are the root interface to the vulkan application library.
+*/
 class instance
 {
 public:

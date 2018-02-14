@@ -6,6 +6,13 @@
 
 namespace shiny::vk {
 
+/*
+  Each physical device maps to one physical GPU mounted to the computer.
+
+  Use this to query the type of queue families and other GPU characteristics
+
+  Programmatic interface to the device lies with logical_device.
+*/
 class physical_device
 {
 public:

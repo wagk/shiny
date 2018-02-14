@@ -1,10 +1,5 @@
 #pragma once
-/*
-  Logical devices are interfaces to the physical device.
 
-  I'm not sure why we're allowed to have multiple interfaces per physical
-  device, but we are.
-*/
 #include <vulkan\vulkan.h>
 
 #include <vector>
@@ -16,6 +11,9 @@
 
 namespace shiny::vk {
 
+/*
+  Logical devices are interfaces to the physical device.
+*/
 class logical_device
 {
 public:
@@ -37,7 +35,7 @@ public:
 private:
     VkDevice       m_device = VK_NULL_HANDLE;
     queue_families m_indices;
-};
+};  // namespace shiny::vk
 
 // device is the common term, not logical_device, even though logical_device is
 // factually correct
