@@ -39,10 +39,10 @@ renderer::renderer()
     // TODO: Improve this interface
     m_instance->enable_debug_reporting();
 
-    m_physical_device.emplace(m_instance->select_physical_device());
+    m_surface.emplace(m_instance->create_surface(m_window));
+    m_physical_device.emplace(m_instance->select_physical_device(m_surface));
     m_logical_device.emplace(m_physical_device->create_logical_device(&validation_layers));
     m_queue.emplace(m_logical_device->get_queue());
-    m_surface.emplace(m_instance->create_surface(m_window));
 
     // m_surface.create(m_instance, m_window);
 }

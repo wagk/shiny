@@ -4,27 +4,43 @@
 namespace shiny::vk {
 
 queue_families
-physical_device::find_queue_families() const
+physical_device::find_queue_families(const std::optional<ext::surface>& sur) const
 {
     queue_families indices;
 
     auto queue_families =
       collect<VkQueueFamilyProperties>(vkGetPhysicalDeviceQueueFamilyProperties, m_device);
 
-    // we just want to find one card with VK_QUEUE_GRAPHICS_BIT
-    int i = 0;
-    for (const auto& families : queue_families) {
-        if (families.queueCount > 0 && families.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            indices.graphics_family = i;
+    for (int i = 0; i < queue_families.size(); ++i) {
+        const auto& families = queue_families[i];
+
+        bool graphics_support = families.queueFlags & VK_QUEUE_GRAPHICS_BIT;
+        // if there is a surface passed in for us to query
+        if (sur.has_value()) {
+            VkBool32 presentation_support = false;
+            // TODO: Wrap vkGetPhysicalDeviceSurfaceSupportKHR
+            vkGetPhysicalDeviceSurfaceSupportKHR(m_device, i, sur.value(), &presentation_support);
+            if (families.queueCount > 0 && presentation_support) {
+                indices.presentation_family(i);
+            }
+        }
+
+        if (families.queueCount > 0 && graphics_support) {
+            indices.graphics_family(i);
         }
         if (indices.is_complete()) {
-            indices.m_props = families;
+            indices.raw_properties(families);
             break;
         }
-        ++i;
     }
 
     return indices;
+}
+
+void
+physical_device::set_queue_families(const std::optional<ext::surface>& surface)
+{
+    m_indices = find_queue_families(surface);
 }
 
 /*
@@ -36,19 +52,19 @@ physical_device::is_device_suitable() const
     return m_indices.is_complete();
 }
 
-physical_device::physical_device(const VkPhysicalDevice& device)
+physical_device::physical_device(const VkPhysicalDevice&            device,
+                                 const std::optional<ext::surface>& surface)
   : m_device(device)
-  , m_indices()
-{
-    m_indices = find_queue_families();
-}
+  , m_indices(find_queue_families(surface))
+{}
+
 
 logical_device
 physical_device::create_logical_device(const std::vector<const char*>* enabled_layers) const
 {
     VkDeviceQueueCreateInfo queue_create_info = {};
     queue_create_info.sType                   = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queue_create_info.queueFamilyIndex        = m_indices.graphics_family;
+    queue_create_info.queueFamilyIndex        = m_indices.graphics_family();
     queue_create_info.queueCount              = 1;
 
     float queue_priority               = 1.0;
