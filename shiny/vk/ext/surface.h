@@ -33,6 +33,8 @@ public:
     surface(surface&&);
     surface& operator=(surface&& rhs);
 
+    operator VkSurfaceKHR() const { return m_surface; }
+
 private:
     const instance* m_instance_ref = nullptr;
     VkSurfaceKHR    m_surface      = VK_NULL_HANDLE;
