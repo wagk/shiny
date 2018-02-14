@@ -5,14 +5,25 @@
 namespace shiny::vk {
 
 /*
-    TODO: Fix this:
-    We currently let external parties set the graphics_family index, which should not be the case.
+  All GPU's support specific queue families. We use this to determine what kind
+  of queues we can use from that GPU
 */
-struct queue_families
+class queue_families
 {
-    int graphics_family = -1;
+public:
+    bool is_complete() const;
 
-    bool is_complete() const { return graphics_family >= 0; }
+    int  graphics_family() const { return m_graphics_family; }
+    void graphics_family(int index) { m_graphics_family = index; }
+    int  presentation_family() const { return m_presentation_family; }
+    void presentation_family(int index) { m_presentation_family = index; }
+
+    VkQueueFamilyProperties raw_properties() const { return m_props; }
+    void raw_properties(const VkQueueFamilyProperties& props) { m_props = props; }
+
+private:
+    int m_graphics_family     = -1;
+    int m_presentation_family = -1;
 
     VkQueueFamilyProperties m_props;
 };
