@@ -46,7 +46,6 @@ physical_device::physical_device(const VkPhysicalDevice& device)
 logical_device
 physical_device::create_logical_device(const std::vector<const char*>* enabled_layers) const
 {
-
     VkDeviceQueueCreateInfo queue_create_info = {};
     queue_create_info.sType                   = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     queue_create_info.queueFamilyIndex        = m_indices.graphics_family;

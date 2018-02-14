@@ -30,8 +30,8 @@ public:
     surface(const surface&) = delete;
     surface& operator=(const surface&) = delete;
 
-    surface(const surface&&);
-    surface& operator=(const surface&& rhs);
+    surface(surface&&);
+    surface& operator=(surface&& rhs);
 
 private:
     const instance* m_instance_ref = nullptr;

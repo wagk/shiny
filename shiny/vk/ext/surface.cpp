@@ -15,19 +15,29 @@ surface::surface(const shiny::vk::instance* inst, VkSurfaceKHR surface)
 
 surface::~surface()
 {
-    vkDestroySurfaceKHR(*m_instance_ref, m_surface, nullptr);
+    if (m_instance_ref && m_surface)
+        vkDestroySurfaceKHR(*m_instance_ref, m_surface, nullptr);
 }
 
-surface::surface(const surface&& sur)
+surface::surface(surface&& sur)
   : m_instance_ref(std::move(sur.m_instance_ref))
   , m_surface(std::move(sur.m_surface))
-{}
+{
+    sur.m_instance_ref = nullptr;
+    sur.m_surface      = VK_NULL_HANDLE;
+}
 
 surface&
-surface::operator=(const surface&& sur)
+surface::operator=(surface&& sur)
 {
+    vkDestroySurfaceKHR(*m_instance_ref, m_surface, nullptr);
+
     m_instance_ref = std::move(sur.m_instance_ref);
     m_surface      = std::move(sur.m_surface);
+
+    sur.m_instance_ref = nullptr;
+    sur.m_surface      = VK_NULL_HANDLE;
+
     return *this;
 }
 

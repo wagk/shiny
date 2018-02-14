@@ -36,8 +36,8 @@ public:
     instance(const instance&) = delete;
     instance& operator=(const instance&) = delete;
 
-    instance(const instance&&);
-    instance& operator=(const instance&&);
+    instance(instance&&);
+    instance& operator=(instance&&);
     ~instance();
 
     operator VkInstance() const { return m_instance; }

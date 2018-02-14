@@ -18,7 +18,7 @@ create_debug_report_callback_ext(VkInstance                                insta
                                  VkDebugReportCallbackEXT*                 p_callback,
                                  const VkAllocationCallbacks*              p_allocator = nullptr)
 {
-    auto func = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
+    static const auto func = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
       instance, "vkCreateDebugReportCallbackEXT");
 
     if (func != nullptr) {
@@ -33,7 +33,7 @@ destroy_debug_report_callback_ext(VkInstance                   instance,
                                   VkDebugReportCallbackEXT     callback,
                                   const VkAllocationCallbacks* p_allocator = nullptr)
 {
-    auto func = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(
+    static const auto func = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(
       instance, "vkDestroyDebugReportCallbackEXT");
     if (func != nullptr) {
         func(instance, callback, p_allocator);
@@ -163,29 +163,36 @@ instance::instance(const std::vector<const char*>* enabled_layers)
     m_result = vkCreateInstance(&create_info, nullptr, &m_instance);
 }
 
-instance::instance(const instance&& inst)
+instance::instance(instance&& inst)
   : m_instance(inst.m_instance)
   , m_result(inst.m_result)
   , m_callback(inst.m_callback)
-{}
+{
+    inst.m_instance = VK_NULL_HANDLE;
+    inst.m_callback = nullptr;
+}
 
 instance&
-instance::operator=(const instance&& inst)
+instance::operator=(instance&& inst)
 {
+    disable_debug_reporting();
+    vkDestroyInstance(m_instance, nullptr);
+
     m_instance = std::move(inst.m_instance);
     m_result   = std::move(inst.m_result);
     m_callback = std::move(inst.m_callback);
+
+    inst.m_instance = VK_NULL_HANDLE;
+    inst.m_callback = nullptr;
+
     return *this;
 }
 
 
 instance::~instance()
 {
-    if (m_callback)
-        disable_debug_reporting();
-    if (m_instance != VK_NULL_HANDLE) {
-        vkDestroyInstance(m_instance, nullptr);
-    }
+    disable_debug_reporting();
+    vkDestroyInstance(m_instance, nullptr);
 }
 
 // Registers a callback for debugging, saves the opaque handle
