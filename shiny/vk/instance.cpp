@@ -6,6 +6,7 @@
 #include <GLFW\glfw3.h>
 #include <algorithm>
 #include <iostream>
+#include <iterator>
 #include <utility>
 
 namespace {
@@ -18,7 +19,7 @@ create_debug_report_callback_ext(VkInstance                                insta
                                  VkDebugReportCallbackEXT*                 p_callback,
                                  const VkAllocationCallbacks*              p_allocator = nullptr)
 {
-    static const auto func = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
+    const auto func = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
       instance, "vkCreateDebugReportCallbackEXT");
 
     if (func != nullptr) {
@@ -33,7 +34,7 @@ destroy_debug_report_callback_ext(VkInstance                   instance,
                                   VkDebugReportCallbackEXT     callback,
                                   const VkAllocationCallbacks* p_allocator = nullptr)
 {
-    static const auto func = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(
+    const auto func = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(
       instance, "vkDestroyDebugReportCallbackEXT");
     if (func != nullptr) {
         func(instance, callback, p_allocator);
@@ -45,23 +46,20 @@ destroy_debug_report_callback_ext(VkInstance                   instance,
 bool
 check_validation_layer_support(const std::vector<const char*>& layers)
 {
-    using shiny::vk::collect;
+    auto available_layers =
+      shiny::vk::collect<VkLayerProperties>(vkEnumerateInstanceLayerProperties);
 
-    auto available_layers = collect<VkLayerProperties>(vkEnumerateInstanceLayerProperties);
+    std::vector<std::string> available_layer_names(available_layers.size());
+    std::transform(available_layers.begin(), available_layers.end(),
+                   std::back_inserter(available_layer_names),
+                   [](const VkLayerProperties& props) { return props.layerName; });
+    std::sort(available_layer_names.begin(), available_layer_names.end());
 
-    for (const std::string& layer_name : layers) {
-        bool available = false;
-        for (const auto& elem : available_layers) {
-            if (elem.layerName == layer_name) {
-                available = true;
-            }
-        }
-        if (available == false) {
-            return false;
-        }
-    }
+    std::vector<std::string> given_layers(layers.begin(), layers.end());
+    std::sort(given_layers.begin(), given_layers.end());
 
-    return true;
+    return std::includes(available_layer_names.begin(), available_layer_names.end(),
+                         given_layers.begin(), given_layers.end());
 }
 
 std::vector<const char*>
@@ -132,6 +130,7 @@ instance::instance(const std::vector<const char*>* enabled_layers)
         for (const std::string& elem : instance_ext_names) {
             if (elem == glfwExtensions[i]) {
                 exists = true;
+                break;
             }
         }
         if (exists == false) {
@@ -220,7 +219,7 @@ instance::disable_debug_reporting()
 }
 
 physical_device
-instance::select_physical_device() const
+instance::select_physical_device(const std::optional<ext::surface>& surface) const
 {
     auto devices = collect<VkPhysicalDevice>(vkEnumeratePhysicalDevices, m_instance);
 
@@ -228,7 +227,9 @@ instance::select_physical_device() const
         throw std::runtime_error("Failed to find a GPU with vulkan support!");
     }
 
-    for (physical_device device : devices) {
+    for (VkPhysicalDevice raw_device : devices) {
+        physical_device device(raw_device, surface);
+
         if (device.is_device_suitable()) {
             return device;
         }

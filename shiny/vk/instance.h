@@ -51,8 +51,9 @@ public:
     void enable_debug_reporting();
     void disable_debug_reporting();
 
-    physical_device select_physical_device() const;
-    ext::surface    create_surface(window& context) const;
+    physical_device select_physical_device(
+      const std::optional<ext::surface>& surface = std::nullopt) const;
+    ext::surface create_surface(window& context) const;
 
 private:
     std::vector<VkExtensionProperties> extensions() const;
