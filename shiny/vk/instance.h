@@ -5,45 +5,54 @@
   callbacks
 */
 
+#include <optional>
 #include <string>
 #include <vector>
+
 #include <vulkan/vulkan.h>
+
+#include <vk/ext/surface.h>
+#include <vk/physical_device.h>
+#include <window.h>
 
 namespace shiny::vk {
 
-
 // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Validation_layers
-VKAPI_ATTR VkBool32 VKAPI_CALL
-                    debug_callback(VkDebugReportFlagsEXT      flags,
-                                   VkDebugReportObjectTypeEXT obj_type,
-                                   uint64_t                   obj,
-                                   size_t                     location,
-                                   int32_t                    code,
-                                   const char*                layer_prefix,
-                                   const char*                msg,
-                                   void*                      user_data);
+VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugReportFlagsEXT      flags,
+                                              VkDebugReportObjectTypeEXT obj_type,
+                                              uint64_t                   obj,
+                                              size_t                     location,
+                                              int32_t                    code,
+                                              const char*                layer_prefix,
+                                              const char*                msg,
+                                              void*                      user_data);
 
 VkApplicationInfo default_appinfo();
 
+/*
+  Instances are the root interface to the vulkan application library.
+*/
 class instance
 {
 public:
-    instance();
+    instance(const std::vector<const char*>* enabled_layers = nullptr);
     instance(const instance&) = delete;
+    instance& operator=(const instance&) = delete;
+
+    instance(instance&&);
+    instance& operator=(instance&&);
     ~instance();
 
-    operator VkInstance() const;
-
-    // if there are validation layers (ie, not nullptr or empty vector), we
-    // assume that debug callbacks are turned on, since that's what the tutorial
-    // does
-    bool create(const std::vector<const char*>* enabled_layers = nullptr);
-    void destroy();
+    operator VkInstance() const { return m_instance; }
+    operator bool() const { return m_result == VK_SUCCESS; }
 
     std::vector<std::string> extension_names() const;
 
     void enable_debug_reporting();
     void disable_debug_reporting();
+
+    physical_device select_physical_device() const;
+    ext::surface    create_surface(window& context) const;
 
 private:
     std::vector<VkExtensionProperties> extensions() const;
@@ -52,7 +61,5 @@ private:
     VkResult   m_result;
 
     VkDebugReportCallbackEXT m_callback = nullptr;
-
-    bool m_has_init;
 };
 }  // namespace shiny::vk

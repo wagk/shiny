@@ -1,4 +1,5 @@
 #include <renderer.h>
+#include <vk/queue.h>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -12,32 +13,38 @@ const bool                     enable_validation_layer = false;
 const std::vector<const char*> validation_layers       = {};
 #else
 const bool                     enable_validation_layer = true;
-const std::vector<const char*> validation_layers       = {
-    "VK_LAYER_LUNARG_standard_validation"
-};
+const std::vector<const char*> validation_layers       = { "VK_LAYER_LUNARG_standard_validation" };
 #endif
 
 }  // namespace
 
 namespace shiny {
 
-renderer::~renderer()
+renderer&
+renderer::singleton()
 {
-    m_instance.destroy();
+    static renderer single;
+    return single;
 }
 
-// analogue for the initVulkan function in the tutorial
-void
-renderer::init()
+renderer::renderer()
 {
-    if (m_instance.create(&validation_layers) == false) {
+    m_window.init();
+
+    m_instance.emplace(&validation_layers);
+    if (m_instance.value() == false) {
         throw std::runtime_error("failed to create instance!");
     }
 
-    m_instance.enable_debug_reporting();
+    // TODO: Improve this interface
+    m_instance->enable_debug_reporting();
 
-    m_physical_device.select_physical_device(m_instance);
-    m_logical_device.create(m_physical_device, &validation_layers);
+    m_physical_device.emplace(m_instance->select_physical_device());
+    m_logical_device.emplace(m_physical_device->create_logical_device(&validation_layers));
+    m_queue.emplace(m_logical_device->get_queue());
+    m_surface.emplace(m_instance->create_surface(m_window));
+
+    // m_surface.create(m_instance, m_window);
 }
 
 void

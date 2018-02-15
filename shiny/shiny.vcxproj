@@ -122,7 +122,7 @@
       </Message>
     </CustomBuildStep>
     <PostBuildEvent>
-      <Command>xcopy /e /v $(ProjectDir)libs\dll $(TargetDir)</Command>
+      <Command>xcopy /e /v /y "$(ProjectDir)libs\dll" "$(TargetDir)"</Command>
     </PostBuildEvent>
     <PostBuildEvent>
       <Message>Copy the dlls over</Message>
@@ -175,7 +175,7 @@
       </Message>
     </CustomBuildStep>
     <PostBuildEvent>
-      <Command>xcopy /e /v $(ProjectDir)libs\dll $(TargetDir)</Command>
+      <Command>xcopy /e /v /y "$(ProjectDir)libs\dll" "$(TargetDir)"</Command>
     </PostBuildEvent>
     <PostBuildEvent>
       <Message>Copy the dlls over</Message>
@@ -185,9 +185,12 @@
     <ClCompile Include="include\glm\detail\glm.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="renderer.cpp" />
+    <ClCompile Include="vk\ext\surface.cpp" />
     <ClCompile Include="vk\instance.cpp" />
     <ClCompile Include="vk\logical_device.cpp" />
     <ClCompile Include="vk\physical_device.cpp" />
+    <ClCompile Include="vk\queue.cpp" />
+    <ClCompile Include="vk\queue_families.cpp" />
     <ClCompile Include="window.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -354,9 +357,12 @@
     <ClInclude Include="include\vulkan\vulkan.h" />
     <ClInclude Include="include\vulkan\vulkan.hpp" />
     <ClInclude Include="renderer.h" />
+    <ClInclude Include="vk\ext\surface.h" />
     <ClInclude Include="vk\instance.h" />
     <ClInclude Include="vk\logical_device.h" />
     <ClInclude Include="vk\physical_device.h" />
+    <ClInclude Include="vk\queue.h" />
+    <ClInclude Include="vk\queue_families.h" />
     <ClInclude Include="vk\utils.h" />
     <ClInclude Include="window.h" />
   </ItemGroup>
