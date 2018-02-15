@@ -15,20 +15,20 @@ class renderer
 public:
     static renderer& singleton();
 
-    renderer();
-
     void draw();
 
     window& glfw_window() { return m_window; }
 
 private:
+    renderer();
+
     window m_window;
 
     // IMPORTANT! Arrange in *Reverse* the order of destruction!!
     std::optional<vk::instance>        m_instance;
     std::optional<vk::physical_device> m_physical_device;
     std::optional<vk::logical_device>  m_logical_device;
-    std::optional<vk::queue>           m_queue;
+    std::optional<vk::queue>           m_present_queue;
     std::optional<vk::ext::surface>    m_surface;
 };
 
