@@ -2,12 +2,8 @@
 
 #include <vulkan\vulkan.h>
 
-#include <vector>
-
 #include <vk/queue.h>
 #include <vk/queue_families.h>
-
-#include <iostream>
 
 namespace shiny::vk {
 

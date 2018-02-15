@@ -3,6 +3,7 @@
 // Debug include, remove when we're done with this bit
 #include <exception>
 #include <iostream>
+#include <utility>
 
 namespace shiny::vk {
 
@@ -17,8 +18,8 @@ logical_device::~logical_device()
 }
 
 logical_device::logical_device(logical_device&& other)
-  : m_device(other.m_device)
-  , m_indices(other.m_indices)
+  : m_device(std::move(other.m_device))
+  , m_indices(std::move(other.m_indices))
 {
     other.m_device = VK_NULL_HANDLE;
 }
@@ -27,9 +28,12 @@ logical_device&
 logical_device::operator=(logical_device&& other)
 {
     vkDestroyDevice(m_device, nullptr);
-    m_device       = other.m_device;
-    m_indices      = other.m_indices;
-    other.m_device = nullptr;
+
+    m_device  = std::move(other.m_device);
+    m_indices = std::move(other.m_indices);
+
+    other.m_device = VK_NULL_HANDLE;
+
     return *this;
 }
 
