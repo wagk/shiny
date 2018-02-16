@@ -58,9 +58,11 @@ public:
 private:
     std::vector<VkExtensionProperties> extensions() const;
 
-    VkInstance m_instance;
+    VkInstance m_instance = VK_NULL_HANDLE;
     VkResult   m_result;
 
     VkDebugReportCallbackEXT m_callback = nullptr;
+
+    std::vector<const char*> m_enabled_layers = {};
 };
 }  // namespace shiny::vk

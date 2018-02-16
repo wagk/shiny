@@ -113,6 +113,7 @@ default_appinfo()
 instance::instance(const std::vector<const char*>* enabled_layers)
   : m_instance(VK_NULL_HANDLE)
   , m_result(VK_SUCCESS)
+  , m_enabled_layers(enabled_layers ? *enabled_layers : std::vector<const char*>{})
 {
     if (enabled_layers && check_validation_layer_support(*enabled_layers) == false) {
         throw std::runtime_error("validation layers are requested but not available!");
@@ -228,7 +229,7 @@ instance::select_physical_device(const std::optional<ext::surface>& surface) con
     }
 
     for (VkPhysicalDevice raw_device : devices) {
-        physical_device device(raw_device, surface);
+        physical_device device(raw_device, surface, m_enabled_layers);
 
         if (device.is_device_suitable()) {
             return device;
