@@ -1,4 +1,5 @@
 #include <vk/physical_device.h>
+#include <vk/queue.h>
 #include <vk/utils.h>
 
 namespace shiny::vk {
@@ -58,26 +59,28 @@ physical_device::physical_device(const VkPhysicalDevice&            device,
   , m_indices(find_queue_families(surface))
 {}
 
-
+/*
+    It appears that the queues are created at the time of logical device creation
+    Which means that all the information we need /must/ be present within this function
+*/
 logical_device
 physical_device::create_logical_device(const std::vector<const char*>* enabled_layers) const
 {
-    VkDeviceQueueCreateInfo queue_create_info = {};
-    queue_create_info.sType                   = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queue_create_info.queueFamilyIndex        = m_indices.graphics_family();
-    queue_create_info.queueCount              = 1;
-
-    float queue_priority               = 1.0;
-    queue_create_info.pQueuePriorities = &queue_priority;
+    queue::create_info queue_create_info = {};
+    queue_create_info.sType              = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queue_create_info.queueFamilyIndex   = m_indices.graphics_family();
+    queue_create_info.queueCount         = 1;
+    float queue_priority                 = 1.0;
+    queue_create_info.pQueuePriorities   = &queue_priority;
 
     VkPhysicalDeviceFeatures device_features = {};
 
     VkDeviceCreateInfo create_info    = {};
     create_info.sType                 = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    create_info.pQueueCreateInfos     = &queue_create_info;
     create_info.queueCreateInfoCount  = 1;
-    create_info.pEnabledFeatures      = &device_features;
+    create_info.pQueueCreateInfos     = &queue_create_info;
     create_info.enabledExtensionCount = 0;
+    create_info.pEnabledFeatures      = &device_features;
 
     if (enabled_layers) {
         create_info.enabledLayerCount   = static_cast<uint32_t>(enabled_layers->size());

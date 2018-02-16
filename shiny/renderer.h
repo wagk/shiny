@@ -28,6 +28,7 @@ private:
     std::optional<vk::instance>        m_instance;
     std::optional<vk::physical_device> m_physical_device;
     std::optional<vk::logical_device>  m_logical_device;
+    std::optional<vk::queue>           m_graphics_queue;
     std::optional<vk::queue>           m_present_queue;
     std::optional<vk::ext::surface>    m_surface;
 };
