@@ -41,13 +41,11 @@ private:
     queue_families   m_indices;
 
     // Helper functions for wrapping creation process
-    VkDeviceQueueCreateInfo& device_queue_create_info(const VkStructureType vk_struct_type,
-                                                      uint32_t              queue_family_index,
-                                                      uint32_t              queue_count,
-                                                      float&                queue_priority) const;
+    VkDeviceQueueCreateInfo& device_queue_create_info(uint32_t queue_family_index,
+                                                      uint32_t queue_count,
+                                                      float&   queue_priority) const;
     // VkPhysicalDeviceFeatures physical_device_features_create_info();
-    VkDeviceCreateInfo& device_create_info(VkStructureType                 vk_struct_type,
-                                           VkDeviceQueueCreateInfo&        queue_create_info,
+    VkDeviceCreateInfo& device_create_info(VkDeviceQueueCreateInfo&        queue_create_info,
                                            uint32_t                        queue_create_info_count,
                                            VkPhysicalDeviceFeatures&       device_features,
                                            uint32_t                        enabled_extension_count,

@@ -1,6 +1,8 @@
 #include <vk/physical_device.h>
 #include <vk/utils.h>
 
+namespace shiny {}
+
 namespace shiny::vk {
 
 queue_families
@@ -53,13 +55,12 @@ physical_device::is_device_suitable() const
 }
 
 VkDeviceQueueCreateInfo& const
-physical_device::device_queue_create_info(const VkStructureType vk_struct_type,
-                                          uint32_t              queue_family_index,
-                                          uint32_t              queue_count,
-                                          float&                queue_priority) const
+physical_device::device_queue_create_info(uint32_t queue_family_index,
+                                          uint32_t queue_count,
+                                          float&   queue_priority) const
 {
     VkDeviceQueueCreateInfo queue_create_info = {};
-    queue_create_info.sType                   = vk_struct_type;
+    queue_create_info.sType                   = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     queue_create_info.queueFamilyIndex        = queue_family_index;
     queue_create_info.queueCount              = queue_count;
     queue_create_info.pQueuePriorities        = &queue_priority;
@@ -67,15 +68,14 @@ physical_device::device_queue_create_info(const VkStructureType vk_struct_type,
 }
 
 VkDeviceCreateInfo& const
-physical_device::device_create_info(VkStructureType                 vk_struct_type,
-                                    VkDeviceQueueCreateInfo&        queue_create_info,
+physical_device::device_create_info(VkDeviceQueueCreateInfo&        queue_create_info,
                                     uint32_t                        queue_create_info_count,
                                     VkPhysicalDeviceFeatures&       device_features,
                                     uint32_t                        enabled_extension_count,
                                     const std::vector<const char*>* enabled_layers) const
 {
     VkDeviceCreateInfo create_info    = {};
-    create_info.sType                 = vk_struct_type;
+    create_info.sType                 = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     create_info.pQueueCreateInfos     = &queue_create_info;
     create_info.queueCreateInfoCount  = queue_create_info_count;
     create_info.pEnabledFeatures      = &device_features;
@@ -92,23 +92,16 @@ physical_device::device_create_info(VkStructureType                 vk_struct_ty
 }
 
 
-physical_device::physical_device(const VkPhysicalDevice&            device,
-                                 const std::optional<ext::surface>& surface)
-  : m_device(device)
-  , m_indices(find_queue_families(surface))
-{}
-
-
 logical_device
 physical_device::create_logical_device(const std::vector<const char*>* enabled_layers) const
 {
-    float                   queue_priority    = 1.0;
-    VkDeviceQueueCreateInfo queue_create_info = device_queue_create_info(
-      VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, m_indices.graphics_family(), 1, queue_priority);
+    float queue_priority = 1.0;
+
+    VkDeviceQueueCreateInfo queue_create_info =
+      device_queue_create_info(m_indices.graphics_family(), 1, queue_priority);
     VkPhysicalDeviceFeatures device_features = {};
     VkDeviceCreateInfo       create_info =
-      device_create_info(VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, queue_create_info, 1,
-                         device_features, 0, enabled_layers);
+      device_create_info(queue_create_info, 1, device_features, 0, enabled_layers);
 
     VkDevice device;
     if (vkCreateDevice(m_device, &create_info, nullptr, &device) != VK_SUCCESS) {
@@ -117,5 +110,12 @@ physical_device::create_logical_device(const std::vector<const char*>* enabled_l
 
     return logical_device(device, m_indices);
 }
+
+physical_device::physical_device(const VkPhysicalDevice&            device,
+                                 const std::optional<ext::surface>& surface)
+  : m_device(device)
+  , m_indices(find_queue_families(surface))
+{}
+
 
 }  // namespace shiny::vk
