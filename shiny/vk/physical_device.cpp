@@ -71,36 +71,8 @@ physical_device::physical_device(const VkPhysicalDevice&            device,
 logical_device
 physical_device::create_logical_device() const
 {
-    float queue_priority = 1.0;
-
-    queue::create_info queue_create_info = {};
-    queue_create_info.sType              = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queue_create_info.queueFamilyIndex   = m_indices.graphics_family();
-    queue_create_info.queueCount         = 1;
-    queue_create_info.pQueuePriorities   = &queue_priority;
-
-    VkPhysicalDeviceFeatures device_features = {};
-
-    VkDeviceCreateInfo create_info    = {};
-    create_info.sType                 = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    create_info.queueCreateInfoCount  = 1;
-    create_info.pQueueCreateInfos     = &queue_create_info;
-    create_info.enabledExtensionCount = 0;
-    create_info.pEnabledFeatures      = &device_features;
-
-    if (m_enabled_layers.empty() == false) {
-        create_info.enabledLayerCount   = static_cast<uint32_t>(m_enabled_layers.size());
-        create_info.ppEnabledLayerNames = m_enabled_layers.data();
-    } else {
-        create_info.enabledLayerCount = 0;
-    }
-
-    VkDevice device;
-    if (vkCreateDevice(m_device, &create_info, nullptr, &device) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create a logical device!");
-    }
-
-    return logical_device(device, m_indices);
+    auto indices = _generate_queue_indices(m_indices);
+    return _create_logical_device(m_device, m_indices, m_enabled_layers, indices);
 }
 
 std::vector<queue::create_info>
@@ -111,5 +83,63 @@ physical_device::generate_queue_info() const
     return queue_info_structs;
 }
 
+logical_device
+physical_device::_create_logical_device(const VkPhysicalDevice&         phys_device,
+                                        const queue_families&           queue_fam,
+                                        const std::vector<const char*>& enabled_layers,
+                                        // Every entry in this vec<int> must be unique
+                                        const std::set<int>& queue_family_indices) const
+{
+    const float queue_priority = 1.0;
+
+    std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
+    for (int queue_index : queue_family_indices) {
+        queue::create_info create_info = {};
+
+        create_info.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        create_info.queueFamilyIndex = queue_index;
+        create_info.queueCount       = 1;  // the number of queues per queue family
+        create_info.pQueuePriorities = &queue_priority;
+
+        queue_create_infos.push_back(create_info);
+    }
+
+    VkPhysicalDeviceFeatures device_features = {};
+
+    VkDeviceCreateInfo create_info    = {};
+    create_info.sType                 = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    create_info.queueCreateInfoCount  = (uint32_t)queue_create_infos.size();
+    create_info.pQueueCreateInfos     = queue_create_infos.data();
+    create_info.enabledExtensionCount = 0;
+    create_info.pEnabledFeatures      = &device_features;
+
+    if (m_enabled_layers.empty() == false) {
+        create_info.enabledLayerCount   = static_cast<uint32_t>(enabled_layers.size());
+        create_info.ppEnabledLayerNames = enabled_layers.data();
+    } else {
+        create_info.enabledLayerCount = 0;
+    }
+
+    VkDevice device;
+    if (vkCreateDevice(phys_device, &create_info, nullptr, &device) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create a logical device!");
+    }
+
+    return logical_device(device, queue_fam);
+}
+
+/*
+  Every queue family that is discovered has their own unique queue index;
+  We have to make sure that these indices are unique when we populate the
+  VkDeviceQueueCreateInfo structs.
+
+  // TODO: Find out what happens if we submit multiple requests of the same
+  // queue family then request for a device
+  */
+const std::set<int>
+physical_device::_generate_queue_indices(const queue_families& fam) const
+{
+    return std::set<int>{ fam.graphics_family(), fam.presentation_family() };
+}
 
 }  // namespace shiny::vk

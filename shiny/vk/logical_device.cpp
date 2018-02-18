@@ -41,6 +41,7 @@ queue
 logical_device::get_queue() const
 {
     VkQueue device_queue;
+    // FIXME: Parameterise this, not all queues are graphical ones
     vkGetDeviceQueue(m_device, m_indices.graphics_family(), 0, &device_queue);
     return queue(device_queue);
 }

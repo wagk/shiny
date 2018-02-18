@@ -363,6 +363,7 @@
     <ClInclude Include="vk\physical_device.h" />
     <ClInclude Include="vk\queue.h" />
     <ClInclude Include="vk\queue_families.h" />
+    <ClInclude Include="vk\raw.h" />
     <ClInclude Include="vk\utils.h" />
     <ClInclude Include="window.h" />
   </ItemGroup>

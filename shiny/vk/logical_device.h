@@ -25,7 +25,14 @@ public:
     /*
       Queues belong to the logical device, they automatically created along with
       the device, but we need to assign handles to them
-    */
+
+      // TODO: We need to add parameters to this function, to get different
+      // queue types. We might also need to define some enums and adjust some
+      // interfaces for this to work
+
+      // TODO: Be able to query presentation queues from it, not just graphics
+      // like what it's doing right now
+      */
     queue get_queue() const;
 
 private:

@@ -560,6 +560,9 @@
     <ClInclude Include="vk\queue_families.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="vk\raw.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="include\glm\detail\func_common.inl">
