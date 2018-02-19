@@ -31,10 +31,10 @@ public:
     // enum flags for checking or something similar
     bool is_complete() const;
 
-    int  graphics_family() const { return m_graphics_family; }
-    void graphics_family(int index) { m_graphics_family = index; }
-    int  presentation_family() const { return m_presentation_family; }
-    void presentation_family(int index) { m_presentation_family = index; }
+    int  graphics_family_index() const { return m_graphics_family; }
+    void graphics_family_index(int index) { m_graphics_family = index; }
+    int  presentation_family_index() const { return m_presentation_family; }
+    void presentation_family_index(int index) { m_presentation_family = index; }
 
     VkQueueFamilyProperties raw_properties() const { return m_props; }
     void raw_properties(const VkQueueFamilyProperties& props) { m_props = props; }

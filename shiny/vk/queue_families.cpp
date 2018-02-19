@@ -24,12 +24,12 @@ queue_families::queue_families(const VkPhysicalDevice&            device,
             // TODO: Wrap vkGetPhysicalDeviceSurfaceSupportKHR
             vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface.value(), &presentation_support);
             if (families.queueCount > 0 && presentation_support) {
-                presentation_family(i);
+                presentation_family_index(i);
             }
         }
 
         if (families.queueCount > 0 && graphics_support) {
-            graphics_family(i);
+            graphics_family_index(i);
         }
         if (is_complete()) {
             raw_properties(families);

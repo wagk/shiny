@@ -25,12 +25,12 @@ physical_device::find_queue_families(const std::optional<ext::surface>& sur) con
             // TODO: Wrap vkGetPhysicalDeviceSurfaceSupportKHR
             vkGetPhysicalDeviceSurfaceSupportKHR(m_device, i, sur.value(), &presentation_support);
             if (families.queueCount > 0 && presentation_support) {
-                indices.presentation_family(i);
+                indices.presentation_family_index(i);
             }
         }
 
         if (families.queueCount > 0 && graphics_support) {
-            indices.graphics_family(i);
+            indices.graphics_family_index(i);
         }
         if (indices.is_complete()) {
             indices.raw_properties(families);
@@ -87,7 +87,7 @@ logical_device
 physical_device::_create_logical_device(const VkPhysicalDevice&         phys_device,
                                         const queue_families&           queue_fam,
                                         const std::vector<const char*>& enabled_layers,
-                                        // Every entry in this vec<int> must be unique
+                                        // NOTE: Every entry in this vec<int> must be unique
                                         const std::set<int>& queue_family_indices) const
 {
     const float queue_priority = 1.0;
@@ -139,7 +139,7 @@ physical_device::_create_logical_device(const VkPhysicalDevice&         phys_dev
 const std::set<int>
 physical_device::_generate_queue_indices(const queue_families& fam) const
 {
-    return std::set<int>{ fam.graphics_family(), fam.presentation_family() };
+    return std::set<int>{ fam.graphics_family_index(), fam.presentation_family_index() };
 }
 
 }  // namespace shiny::vk

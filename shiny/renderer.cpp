@@ -42,7 +42,10 @@ renderer::renderer()
     m_surface.emplace(m_instance->create_surface(m_window));
     m_physical_device.emplace(m_instance->select_physical_device(m_surface));
     m_logical_device.emplace(m_physical_device->create_logical_device());
-    m_present_queue.emplace(m_logical_device->get_queue());
+    m_graphics_queue.emplace(m_logical_device->get_queue(
+      m_physical_device->device_queue_family().graphics_family_index()));
+    m_present_queue.emplace(m_logical_device->get_queue(
+      m_physical_device->device_queue_family().presentation_family_index()));
 }
 
 void
