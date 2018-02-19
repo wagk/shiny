@@ -32,8 +32,12 @@ public:
 
       // TODO: Be able to query presentation queues from it, not just graphics
       // like what it's doing right now
+
+      // NOTE: This will now take in an index that must be provided. This index
+      // would represent the queue family index that is maintained by
+      // queue_families
       */
-    queue get_queue() const;
+    queue get_queue(int index) const;
 
 private:
     VkDevice       m_device = VK_NULL_HANDLE;
