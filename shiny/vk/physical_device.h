@@ -35,8 +35,6 @@ public:
     queue_families find_queue_families(
       const std::optional<ext::surface>& surface = std::nullopt) const;
 
-    queue_families device_queue_family() const { return m_indices; }
-
     void set_queue_families(const std::optional<ext::surface>& surface = std::nullopt);
 
     void enabled_layers(const std::vector<const char*>& layers) { m_enabled_layers = layers; };
