@@ -40,6 +40,8 @@ public:
     void enabled_layers(const std::vector<const char*>& layers) { m_enabled_layers = layers; };
     std::vector<const char*> enabled_layers() const { return m_enabled_layers; }
 
+    queue_families device_queue_family() const { return m_indices; }
+
 private:
     std::vector<queue::create_info> generate_queue_info() const;
 

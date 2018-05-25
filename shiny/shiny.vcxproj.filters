@@ -15,34 +15,37 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
+    <ClCompile Include="include\glm\detail\glm.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="include\glm\detail\glm.cpp">
+    <ClCompile Include="reference.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="renderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="vk\instance.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="window.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vk\physical_device.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vk\logical_device.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vk\queue.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="vk\ext\surface.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="vk\instance.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="vk\logical_device.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="vk\physical_device.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="vk\queue.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="vk\queue_families.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -536,31 +539,31 @@
     <ClInclude Include="renderer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="vk\instance.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="window.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="vk\physical_device.h">
+    <ClInclude Include="vk\ext\surface.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vk\instance.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vk\logical_device.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="vk\utils.h">
+    <ClInclude Include="vk\physical_device.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vk\queue.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vk\ext\surface.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vk\queue_families.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vk\raw.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vk\utils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
