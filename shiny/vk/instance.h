@@ -66,3 +66,5 @@ private:
     std::vector<const char*> m_enabled_layers = {};
 };
 }  // namespace shiny::vk
+
+namespace shiny::graphics::vk {}

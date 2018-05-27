@@ -48,6 +48,9 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="graphics\vk\instance.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\FreeImage.h">
@@ -564,6 +567,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vk\utils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="graphics\vk\instance.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

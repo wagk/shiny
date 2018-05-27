@@ -182,6 +182,7 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="graphics\vk\instance.cpp" />
     <ClCompile Include="include\glm\detail\glm.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="reference.cpp" />
@@ -195,6 +196,7 @@
     <ClCompile Include="window.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="graphics\vk\instance.h" />
     <ClInclude Include="include\FreeImage.h" />
     <ClInclude Include="include\GLFW\glfw3.h" />
     <ClInclude Include="include\GLFW\glfw3native.h" />
