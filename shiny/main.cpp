@@ -5,17 +5,21 @@
 #include <iostream>
 #include <stdexcept>
 
-#include <renderer.h>
-#include <vk/instance.h>
-#include <window.h>
+#include <graphics/renderer.h>
+//#include <renderer.h>
+//#include <vk/instance.h>
+//#include <window.h>
 
 int
 main()
 {
+    shiny::graphics::renderer renderer;
+
     try {
-        while (shiny::renderer::singleton().glfw_window().close_window() == false) {
-            shiny::renderer::singleton().glfw_window().poll_events();
-        }
+        // while (shiny::renderer::singleton().glfw_window().close_window() == false) {
+        //    shiny::renderer::singleton().glfw_window().poll_events();
+        //}
+        renderer.run();
     } catch (const std::runtime_error& e) {
         std::cerr << e.what() << std::endl;
         return EXIT_FAILURE;

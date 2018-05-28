@@ -182,20 +182,13 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="graphics\renderer.cpp" />
     <ClCompile Include="graphics\vk\instance.cpp" />
     <ClCompile Include="include\glm\detail\glm.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="reference.cpp" />
-    <ClCompile Include="renderer.cpp" />
-    <ClCompile Include="vk\ext\surface.cpp" />
-    <ClCompile Include="vk\instance.cpp" />
-    <ClCompile Include="vk\logical_device.cpp" />
-    <ClCompile Include="vk\physical_device.cpp" />
-    <ClCompile Include="vk\queue.cpp" />
-    <ClCompile Include="vk\queue_families.cpp" />
-    <ClCompile Include="window.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="graphics\renderer.h" />
     <ClInclude Include="graphics\vk\instance.h" />
     <ClInclude Include="include\FreeImage.h" />
     <ClInclude Include="include\GLFW\glfw3.h" />
@@ -359,16 +352,6 @@
     <ClInclude Include="include\vulkan\vk_sdk_platform.h" />
     <ClInclude Include="include\vulkan\vulkan.h" />
     <ClInclude Include="include\vulkan\vulkan.hpp" />
-    <ClInclude Include="renderer.h" />
-    <ClInclude Include="vk\ext\surface.h" />
-    <ClInclude Include="vk\instance.h" />
-    <ClInclude Include="vk\logical_device.h" />
-    <ClInclude Include="vk\physical_device.h" />
-    <ClInclude Include="vk\queue.h" />
-    <ClInclude Include="vk\queue_families.h" />
-    <ClInclude Include="vk\raw.h" />
-    <ClInclude Include="vk\utils.h" />
-    <ClInclude Include="window.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="include\glm\detail\func_common.inl" />
