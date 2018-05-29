@@ -24,11 +24,17 @@ private:
 
     void createInstance();
     void setupDebugCallback();
+    void pickPhysicalDevice();
+    void createLogicalDevice();
 
     GLFWwindow* m_window = nullptr;
 
-    vk::Instance               m_instance;
+    // can't use UniqueDebugReportCallbackEXT because of
+    // https://github.com/KhronosGroup/Vulkan-Hpp/issues/212
+
+    vk::UniqueInstance         m_instance;
     vk::DebugReportCallbackEXT m_callback;
+    vk::PhysicalDevice         m_physical_device;
 };
 
 }  // namespace shiny::graphics

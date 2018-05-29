@@ -8,6 +8,17 @@
 
 namespace {
 
+const int WIDTH  = 800;
+const int HEIGHT = 600;
+
+const std::vector<const char*> validationLayers = { "VK_LAYER_LUNARG_standard_validation" };
+
+#ifdef NDEBUG
+constexpr const bool enableValidationLayers = false;
+#else
+constexpr const bool enableValidationLayers = true;
+#endif
+
 static VKAPI_ATTR VkBool32 VKAPI_CALL
                            debugCallback(VkDebugReportFlagsEXT      flags,
                                          VkDebugReportObjectTypeEXT objType,
@@ -32,10 +43,10 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL
 }
 
 VkResult
-CreateDebugReportCallbackEXT(VkInstance                                  instance,
+CreateDebugReportCallbackEXT(vk::Instance                                instance,
                              const vk::DebugReportCallbackCreateInfoEXT& pCreateInfo,
-                             const vk::AllocationCallbacks*              pAllocator,
-                             vk::DebugReportCallbackEXT&                 pCallback)
+                             vk::DebugReportCallbackEXT&                 pCallback,
+                             const vk::AllocationCallbacks*              pAllocator = nullptr)
 {
     auto func = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
       instance, "vkCreateDebugReportCallbackEXT");
@@ -53,29 +64,56 @@ CreateDebugReportCallbackEXT(VkInstance                                  instanc
 }
 
 void
-DestroyDebugReportCallbackEXT(VkInstance                     instance,
+DestroyDebugReportCallbackEXT(vk::Instance                   instance,
                               vk::DebugReportCallbackEXT&    rCallback,
-                              const vk::AllocationCallbacks* pAllocator)
+                              const vk::AllocationCallbacks* pAllocator = nullptr)
 {
     auto func = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(
       instance, "vkDestroyDebugReportCallbackEXT");
     if (func != nullptr) {
         VkDebugReportCallbackEXT callback = rCallback;
         func(instance, callback, (VkAllocationCallbacks*)pAllocator);
-        rCallback = VK_NULL_HANDLE;
+        rCallback = nullptr;
     }
 }
 
-const int WIDTH  = 800;
-const int HEIGHT = 600;
+class QueueFamilyIndices
+{
+    int m_graphicsFamily = -1;
 
-const std::vector<const char*> validationLayers = { "VK_LAYER_LUNARG_standard_validation" };
+public:
+    bool isComplete() { return graphicsFamily() >= 0; }
 
-#ifdef NDEBUG
-constexpr const bool enableValidationLayers = false;
-#else
-constexpr const bool enableValidationLayers = true;
-#endif
+    int  graphicsFamily() const { return m_graphicsFamily; }
+    void graphicsFamily(int i) { m_graphicsFamily = i; }
+};
+
+QueueFamilyIndices
+findQueueFamilies(const vk::PhysicalDevice& device)
+{
+    QueueFamilyIndices indices;
+
+    std::vector<vk::QueueFamilyProperties> families = device.getQueueFamilyProperties();
+
+    for (size_t i = 0; i < families.size(); i++) {
+        auto queuefamily = families[i];
+        if (queuefamily.queueCount > 0 && queuefamily.queueFlags & vk::QueueFlagBits::eGraphics) {
+            indices.graphicsFamily((int)i);
+        }
+
+        if (indices.isComplete()) {
+            break;
+        }
+    }
+
+    return indices;
+}
+
+bool
+isDeviceSuitable(const vk::PhysicalDevice& device)
+{
+    return findQueueFamilies(device).isComplete();
+}
 
 bool
 checkValidationLayerSupport()
@@ -180,7 +218,7 @@ renderer::createInstance()
     createinfo.setEnabledExtensionCount((uint32_t)extensions.size());
     createinfo.setPpEnabledExtensionNames(extensions.data());
 
-    m_instance = vk::createInstance(createinfo, nullptr);
+    m_instance.reset(vk::createInstance(createinfo, nullptr));
 
     // for debugging
     {
@@ -199,14 +237,75 @@ renderer::setupDebugCallback()
     if (!enableValidationLayers)
         return;
 
-    auto createinfo =
-      vk::DebugReportCallbackCreateInfoEXT()
-        .setPfnCallback(debugCallback)
-        .setFlags(vk::DebugReportFlagBitsEXT::eError | vk::DebugReportFlagBitsEXT::eWarning);
+    using DebugFlags = vk::DebugReportFlagBitsEXT;
 
-    if (CreateDebugReportCallbackEXT(m_instance, createinfo, nullptr, m_callback) != VK_SUCCESS) {
+    auto createinfo = vk::DebugReportCallbackCreateInfoEXT()
+                        .setPfnCallback(debugCallback)
+                        .setFlags(DebugFlags::eError | DebugFlags::eWarning);
+
+    if (CreateDebugReportCallbackEXT(m_instance.get(), createinfo, m_callback) != VK_SUCCESS) {
         throw std::runtime_error("Failed to set up debug callback!");
     }
+}
+
+/*
+A physical device usually represents a single complete implementation of Vulkan (excluding
+instance-level functionality) available to the host, of which there are a finite number.
+
+https://www.khronos.org/registry/vulkan/specs/1.0/html/vkspec.html#devsandqueues-physical-device-enumeration
+*/
+void
+renderer::pickPhysicalDevice()
+{
+    std::vector<vk::PhysicalDevice> physical_devices = m_instance->enumeratePhysicalDevices();
+
+    if (physical_devices.empty())
+        throw std::runtime_error("Failed to find a GPU with Vulkan support!");
+
+    for (const auto& device : physical_devices) {
+        if (isDeviceSuitable(device)) {
+            m_physical_device = device;
+            break;
+        }
+    }
+
+    if (!m_physical_device)
+        throw std::runtime_error("Failed to find a suitable GPU!");
+}
+
+/*
+Device objects represent logical connections to physical devices. Each device exposes a number of
+queue families each having one or more queues. All queues in a queue family support the same
+operations.
+
+https://www.khronos.org/registry/vulkan/specs/1.0/html/vkspec.html#devsandqueues-devices
+*/
+void
+renderer::createLogicalDevice()
+{
+    QueueFamilyIndices indices = findQueueFamilies(m_physical_device);
+
+    float queuepriority = 1.f;
+
+    auto queuecreateinfo = vk::DeviceQueueCreateInfo()
+                             .setQueueFamilyIndex(indices.graphicsFamily())
+                             .setQueueCount(1)
+                             .setPQueuePriorities(&queuepriority);
+
+    auto devicefeatures = vk::PhysicalDeviceFeatures();
+
+    auto createinfo = vk::DeviceCreateInfo()
+                        .setPQueueCreateInfos(&queuecreateinfo)
+                        .setQueueCreateInfoCount(1)
+                        .setPEnabledFeatures(&devicefeatures)
+                        .setEnabledExtensionCount(0);
+
+    if (enableValidationLayers) {
+        createinfo.setEnabledLayerCount((uint32_t)validationLayers.size());
+        createinfo.setPpEnabledLayerNames(validationLayers.data());
+    }
+
+    m_physical_device.createDevice(createinfo);
 }
 
 void
@@ -214,6 +313,7 @@ renderer::initVulkan()
 {
     createInstance();
     setupDebugCallback();
+    pickPhysicalDevice();
 }
 
 void
@@ -228,9 +328,8 @@ void
 renderer::cleanup()
 {
     if (enableValidationLayers) {
-        DestroyDebugReportCallbackEXT(m_instance, m_callback, nullptr);
+        DestroyDebugReportCallbackEXT(m_instance.get(), m_callback);
     }
-    m_instance.destroy();
 
     glfwDestroyWindow(m_window);
     glfwTerminate();
