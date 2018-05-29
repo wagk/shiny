@@ -70,14 +70,14 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LibraryPath>$(ProjectDir)libs\;$(LibraryPath);</LibraryPath>
+    <LibraryPath>$(ProjectDir)libs\;$(LibraryPath);$(VULKAN_SDK)\Lib;</LibraryPath>
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
-    <SourcePath>$(VC_SourcePath);</SourcePath>
+    <SourcePath>$(VC_SourcePath);$(VULKAN_SDK)\Source\lib;</SourcePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LibraryPath>$(ProjectDir)libs\;$(LibraryPath);</LibraryPath>
+    <LibraryPath>$(ProjectDir)libs\;$(LibraryPath);$(VULKAN_SDK)\Lib;</LibraryPath>
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
-    <SourcePath>$(VC_SourcePath);</SourcePath>
+    <SourcePath>$(VC_SourcePath);$(VULKAN_SDK)\Source\lib;</SourcePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
@@ -90,6 +90,7 @@
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
     </ClCompile>
     <CustomBuildStep>
       <Command>
@@ -106,10 +107,10 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <WarningLevel>Level4</WarningLevel>
+      <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir);</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
@@ -135,6 +136,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -155,12 +157,12 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <WarningLevel>Level4</WarningLevel>
+      <WarningLevel>Level3</WarningLevel>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir);</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
@@ -342,16 +344,6 @@
     <ClInclude Include="include\glm\vector_relational.hpp" />
     <ClInclude Include="include\stb_image.h" />
     <ClInclude Include="include\tiny_obj_loader.h" />
-    <ClInclude Include="include\vulkan\GLSL.std.450.h" />
-    <ClInclude Include="include\vulkan\icd-spv.h" />
-    <ClInclude Include="include\vulkan\spirv.h" />
-    <ClInclude Include="include\vulkan\spirv.hpp" />
-    <ClInclude Include="include\vulkan\vk_icd.h" />
-    <ClInclude Include="include\vulkan\vk_layer.h" />
-    <ClInclude Include="include\vulkan\vk_platform.h" />
-    <ClInclude Include="include\vulkan\vk_sdk_platform.h" />
-    <ClInclude Include="include\vulkan\vulkan.h" />
-    <ClInclude Include="include\vulkan\vulkan.hpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="include\glm\detail\func_common.inl" />
