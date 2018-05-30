@@ -14,6 +14,8 @@ const int HEIGHT = 600;
 
 const std::vector<const char*> validationLayers = { "VK_LAYER_LUNARG_standard_validation" };
 
+const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+
 #ifdef NDEBUG
 constexpr const bool enableValidationLayers = false;
 #else
@@ -120,10 +122,70 @@ findQueueFamilies(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surfac
     return indices;
 }
 
+struct SwapChainSupportDetails
+{
+    vk::SurfaceCapabilitiesKHR        capabilities;
+    std::vector<vk::SurfaceFormatKHR> formats;
+    std::vector<vk::PresentModeKHR>   presentModes;
+};
+
+/*
+Just checking if a swap chain is available is not sufficient, because it may not actually be
+compatible with our window surface. Creating a swap chain also involves a lot more settings than
+instance and device creation, so we need to query for some more details before we're able to
+proceed.
+
+There are basically three kinds of properties we need to check:
+
+    - Basic surface capabilities (min/max number of images in swap chain, min/max width and height
+of images)
+    - Surface formats (pixel format, color space)
+    - Available presentation modes
+*/
+SwapChainSupportDetails
+querySwapChainSupport(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface)
+{
+    SwapChainSupportDetails details;
+
+    details.capabilities = device.getSurfaceCapabilitiesKHR(surface);
+    details.formats      = device.getSurfaceFormatsKHR(surface);
+    details.presentModes = device.getSurfacePresentModesKHR(surface);
+
+    return details;
+}
+
+/*
+Not all graphics cards are capable of presenting images directly to a screen for various reasons,
+for example because they are designed for servers and don't have any display outputs. Secondly,
+since image presentation is heavily tied into the window system and the surfaces associated with
+windows, it is not actually part of the Vulkan core. You have to enable the VK_KHR_swapchain device
+extension after querying for its support.
+*/
+bool
+checkDeviceExtensionSupport(const vk::PhysicalDevice& device)
+{
+    std::set<std::string> requiredExtensions = { deviceExtensions.begin(), deviceExtensions.end() };
+
+    for (const vk::ExtensionProperties& extension : device.enumerateDeviceExtensionProperties()) {
+        requiredExtensions.erase(extension.extensionName);
+    }
+
+    return requiredExtensions.empty();
+}
+
 bool
 isDeviceSuitable(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface)
 {
-    return findQueueFamilies(device, surface).isComplete();
+    bool extensionsSupported = checkDeviceExtensionSupport(device);
+    bool queueFamilyComplete = findQueueFamilies(device, surface).isComplete();
+    bool swapChainAdequate   = false;
+
+    if (extensionsSupported) {
+        auto details      = querySwapChainSupport(device, surface);
+        swapChainAdequate = !details.formats.empty() && !details.presentModes.empty();
+    }
+
+    return extensionsSupported && queueFamilyComplete && swapChainAdequate;
 }
 
 bool
@@ -329,10 +391,11 @@ renderer::createLogicalDevice()
     auto devicefeatures = vk::PhysicalDeviceFeatures();
 
     auto createinfo = vk::DeviceCreateInfo()
-                        .setPQueueCreateInfos(queuecreateinfos.data())
                         .setQueueCreateInfoCount((uint32_t)queuecreateinfos.size())
+                        .setPQueueCreateInfos(queuecreateinfos.data())
                         .setPEnabledFeatures(&devicefeatures)
-                        .setEnabledExtensionCount(0);
+                        .setEnabledExtensionCount((uint32_t)deviceExtensions.size())
+                        .setPpEnabledExtensionNames(deviceExtensions.data());
 
     if (enableValidationLayers) {
         createinfo.setEnabledLayerCount((uint32_t)validationLayers.size());
