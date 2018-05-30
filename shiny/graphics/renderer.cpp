@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <iostream>
+#include <set>
 #include <vector>
 
 #define UNREFERENCED_PARAMETER(P) (P)
@@ -315,16 +316,21 @@ renderer::createLogicalDevice()
 
     float queuepriority = 1.f;
 
-    auto queuecreateinfo = vk::DeviceQueueCreateInfo()
-                             .setQueueFamilyIndex(indices.graphicsFamily())
-                             .setQueueCount(1)
-                             .setPQueuePriorities(&queuepriority);
+    std::vector<vk::DeviceQueueCreateInfo> queuecreateinfos;
+    std::set<int> uniquefamilies = { indices.graphicsFamily(), indices.presentFamily() };
+
+    for (int queuefamily : uniquefamilies) {
+        queuecreateinfos.emplace_back(vk::DeviceQueueCreateInfo()
+                                        .setQueueFamilyIndex(queuefamily)
+                                        .setQueueCount(1)
+                                        .setPQueuePriorities(&queuepriority));
+    }
 
     auto devicefeatures = vk::PhysicalDeviceFeatures();
 
     auto createinfo = vk::DeviceCreateInfo()
-                        .setPQueueCreateInfos(&queuecreateinfo)
-                        .setQueueCreateInfoCount(1)
+                        .setPQueueCreateInfos(queuecreateinfos.data())
+                        .setQueueCreateInfoCount((uint32_t)queuecreateinfos.size())
                         .setPEnabledFeatures(&devicefeatures)
                         .setEnabledExtensionCount(0);
 
@@ -334,7 +340,9 @@ renderer::createLogicalDevice()
     }
 
     m_device.reset(m_physical_device.createDevice(createinfo));
-    m_presentation_queue = m_device->getQueue(indices.graphicsFamily(), 0);
+
+    m_graphics_queue     = m_device->getQueue(indices.graphicsFamily(), 0);
+    m_presentation_queue = m_device->getQueue(indices.presentFamily(), 0);
 }
 
 void
@@ -358,10 +366,14 @@ renderer::mainLoop()
 void
 renderer::cleanup()
 {
+
     if (enableValidationLayers) {
         DestroyDebugReportCallbackEXT(m_instance.get(), m_callback);
     }
 
+    // vk::surfaceKHR objects do not have a destroy()
+    // https://github.com/KhronosGroup/Vulkan-Hpp/issues/204
+    m_instance->destroySurfaceKHR(m_surface.release());
 
     glfwDestroyWindow(m_window);
     glfwTerminate();
