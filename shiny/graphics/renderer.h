@@ -38,7 +38,7 @@ private:
     vk::UniqueSurfaceKHR       m_surface;
     vk::PhysicalDevice         m_physical_device;
     vk::UniqueDevice           m_device;
-    vk::Queue                  m_queue;
+    vk::Queue                  m_presentation_queue;
 };
 
 }  // namespace shiny::graphics

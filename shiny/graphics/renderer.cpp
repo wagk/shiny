@@ -93,14 +93,20 @@ public:
 };
 
 QueueFamilyIndices
-findQueueFamilies(const vk::PhysicalDevice& device)
+findQueueFamilies(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface)
 {
     QueueFamilyIndices indices;
 
     std::vector<vk::QueueFamilyProperties> families = device.getQueueFamilyProperties();
 
     for (size_t i = 0; i < families.size(); i++) {
-        auto queuefamily = families[i];
+        auto       queuefamily          = families[i];
+        vk::Bool32 presentation_support = device.getSurfaceSupportKHR((uint32_t)i, surface);
+
+        if (queuefamily.queueCount > 0 && presentation_support) {
+            indices.presentFamily((int)i);
+        }
+
         if (queuefamily.queueCount > 0 && queuefamily.queueFlags & vk::QueueFlagBits::eGraphics) {
             indices.graphicsFamily((int)i);
         }
@@ -114,9 +120,9 @@ findQueueFamilies(const vk::PhysicalDevice& device)
 }
 
 bool
-isDeviceSuitable(const vk::PhysicalDevice& device)
+isDeviceSuitable(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface)
 {
-    return findQueueFamilies(device).isComplete();
+    return findQueueFamilies(device, surface).isComplete();
 }
 
 bool
@@ -285,7 +291,7 @@ renderer::pickPhysicalDevice()
         throw std::runtime_error("Failed to find a GPU with Vulkan support!");
 
     for (const auto& device : physical_devices) {
-        if (isDeviceSuitable(device)) {
+        if (isDeviceSuitable(device, m_surface.get())) {
             m_physical_device = device;
             break;
         }
@@ -305,7 +311,7 @@ https://www.khronos.org/registry/vulkan/specs/1.0/html/vkspec.html#devsandqueues
 void
 renderer::createLogicalDevice()
 {
-    QueueFamilyIndices indices = findQueueFamilies(m_physical_device);
+    QueueFamilyIndices indices = findQueueFamilies(m_physical_device, m_surface.get());
 
     float queuepriority = 1.f;
 
@@ -328,7 +334,7 @@ renderer::createLogicalDevice()
     }
 
     m_device.reset(m_physical_device.createDevice(createinfo));
-    m_queue = m_device->getQueue(indices.graphicsFamily(), 0);
+    m_presentation_queue = m_device->getQueue(indices.graphicsFamily(), 0);
 }
 
 void
@@ -336,7 +342,9 @@ renderer::initVulkan()
 {
     createInstance();
     setupDebugCallback();
+    createSurface();
     pickPhysicalDevice();
+    createLogicalDevice();
 }
 
 void
@@ -353,6 +361,7 @@ renderer::cleanup()
     if (enableValidationLayers) {
         DestroyDebugReportCallbackEXT(m_instance.get(), m_callback);
     }
+
 
     glfwDestroyWindow(m_window);
     glfwTerminate();
