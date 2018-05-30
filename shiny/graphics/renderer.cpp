@@ -79,13 +79,17 @@ DestroyDebugReportCallbackEXT(vk::Instance                   instance,
 
 class QueueFamilyIndices
 {
-    int m_graphicsFamily = -1;
+    int m_graphicsFamily     = -1;
+    int m_presentationFamily = -1;
 
 public:
-    bool isComplete() { return graphicsFamily() >= 0; }
+    bool isComplete() { return graphicsFamily() >= 0 && presentFamily() >= 0; }
 
     int  graphicsFamily() const { return m_graphicsFamily; }
     void graphicsFamily(int i) { m_graphicsFamily = i; }
+
+    int  presentFamily() const { return m_presentationFamily; }
+    void presentFamily(int i) { m_presentationFamily = i; }
 };
 
 QueueFamilyIndices
