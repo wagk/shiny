@@ -249,10 +249,28 @@ renderer::setupDebugCallback()
 }
 
 /*
+GLFW wraps around nearly all of surface creation for us, since it is a platform agnostic windowing
+library
+
+https://www.khronos.org/registry/vulkan/specs/1.0/html/vkspec.html#boilerplate-wsi-header
+*/
+void
+renderer::createSurface()
+{
+    VkSurfaceKHR surface;
+    if (glfwCreateWindowSurface(m_instance.get(), m_window, nullptr, &surface) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create window surface!");
+    }
+    m_surface.reset(surface);
+}
+
+/*
 A physical device usually represents a single complete implementation of Vulkan (excluding
 instance-level functionality) available to the host, of which there are a finite number.
 
 https://www.khronos.org/registry/vulkan/specs/1.0/html/vkspec.html#devsandqueues-physical-device-enumeration
+
+Physical devices don't have deleter functions, since they're not actually allocated out to the user.
 */
 void
 renderer::pickPhysicalDevice()
@@ -305,7 +323,8 @@ renderer::createLogicalDevice()
         createinfo.setPpEnabledLayerNames(validationLayers.data());
     }
 
-    m_physical_device.createDevice(createinfo);
+    m_device.reset(m_physical_device.createDevice(createinfo));
+    m_queue = m_device->getQueue(indices.graphicsFamily(), 0);
 }
 
 void
