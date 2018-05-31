@@ -173,6 +173,10 @@ checkDeviceExtensionSupport(const vk::PhysicalDevice& device)
     return requiredExtensions.empty();
 }
 
+/*
+We attempt to select for a device that supports all the features we need to draw something on the
+screen
+*/
 bool
 isDeviceSuitable(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface)
 {
@@ -186,6 +190,68 @@ isDeviceSuitable(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface
     }
 
     return extensionsSupported && queueFamilyComplete && swapChainAdequate;
+}
+
+/*
+if the swapChainAdequate conditions were met then the support is definitely sufficient, but there
+may still be many different modes of varying optimality. We'll now write a couple of functions to
+find the right settings for the best possible swap chain. There are three types of settings to
+determine:
+
+    - Surface format (color depth)
+    - Presentation mode (conditions for "swapping" images to the screen)
+    - Swap extent (resolution of images in swap chain)
+*/
+vk::SurfaceFormatKHR
+chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableformats)
+{
+    if (availableformats.size() == 1 && availableformats[0].format == vk::Format::eUndefined) {
+        return vk::SurfaceFormatKHR{ vk::Format::eB8G8R8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear };
+    }
+
+    for (const auto& availableformat : availableformats) {
+        if (availableformat.format == vk::Format::eB8G8R8A8Unorm
+            && availableformat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+            return availableformat;
+        }
+    }
+
+    // TODO: This can probably be done better
+    return availableformats.front();
+}
+
+/*
+The presentation mode is arguably the most important setting for the swap chain, because it
+represents the actual conditions for showing images to the screen. There are four possible modes
+available in Vulkan:
+
+    - VK_PRESENT_MODE_IMMEDIATE_KHR: Images submitted by your application are transferred to the
+screen right away, which may result in tearing.
+
+    - VK_PRESENT_MODE_FIFO_KHR: The swap chain is a queue where the display takes an image from the
+front of the queue when the display is refreshed and the program inserts rendered images at the back
+of the queue. If the queue is full then the program has to wait. This is most similar to vertical
+sync as found in modern games. The moment that the display is refreshed is known as "vertical
+blank".
+
+    - VK_PRESENT_MODE_FIFO_RELAXED_KHR: This mode only differs from the previous one if the
+application is late and the queue was empty at the last vertical blank. Instead of waiting for the
+next vertical blank, the image is transferred right away when it finally arrives. This may result in
+visible tearing.
+
+    - VK_PRESENT_MODE_MAILBOX_KHR: This is another variation of the second mode. Instead of blocking
+the application when the queue is full, the images that are already queued are simply replaced with
+the newer ones. This mode can be used to implement triple buffering, which allows you to avoid
+tearing with significantly less latency issues than standard vertical sync that uses double
+buffering.
+
+Only the VK_PRESENT_MODE_FIFO_KHR mode is guaranteed to be available, so we'll again have to write a
+function that looks for the best mode that is available:
+*/
+vk::PresentModeKHR
+chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)
+{
+    return vk::PresentModeKHR::eFifo;
 }
 
 bool
