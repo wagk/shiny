@@ -1,7 +1,10 @@
 #include "graphics/renderer.h"
 
+#include <algorithm>
+#include <array>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <set>
 #include <vector>
 
@@ -9,8 +12,8 @@
 
 namespace {
 
-const int WIDTH  = 800;
-const int HEIGHT = 600;
+const uint32_t WIDTH  = 800;
+const uint32_t HEIGHT = 600;
 
 const std::vector<const char*> validationLayers = { "VK_LAYER_LUNARG_standard_validation" };
 
@@ -95,6 +98,13 @@ public:
     void presentFamily(int i) { m_presentationFamily = i; }
 };
 
+/*
+It has been briefly touched upon before that almost every operation in Vulkan, anything from drawing
+to uploading textures, requires commands to be submitted to a queue. There are different types of
+queues that originate from different queue families and each family of queues allows only a subset
+of commands. For example, there could be a queue family that only allows processing of compute
+commands or one that only allows memory transfer related commands.
+*/
 QueueFamilyIndices
 findQueueFamilies(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface)
 {
@@ -251,7 +261,40 @@ function that looks for the best mode that is available:
 vk::PresentModeKHR
 chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes)
 {
-    return vk::PresentModeKHR::eFifo;
+    vk::PresentModeKHR bestmode = vk::PresentModeKHR::eFifo;
+
+    for (const auto& availablepresentmode : availablePresentModes) {
+        if (availablepresentmode == vk::PresentModeKHR::eMailbox) {
+            return availablepresentmode;
+        }
+        if (availablepresentmode == vk::PresentModeKHR::eImmediate) {
+            bestmode = availablepresentmode;
+        }
+    }
+    return bestmode;
+}
+
+/*
+The swap extent is the resolution of the swap chain images and it's almost always exactly equal to
+the resolution of the window that we're drawing to. The range of the possible resolutions is defined
+in the VkSurfaceCapabilitiesKHR structure. Vulkan tells us to match the resolution of the window by
+setting the width and height in the currentExtent member. However, some window managers do allow us
+to differ here and this is indicated by setting the width and height in currentExtent to a special
+value: the maximum value of uint32_t. In that case we'll pick the resolution that best matches the
+window within the minImageExtent and maxImageExtent bounds.
+*/
+vk::Extent2D
+chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
+{
+    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+        return capabilities.currentExtent;
+    }
+
+    vk::Extent2D actual_extent(
+      std::clamp(WIDTH, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+      std::clamp(HEIGHT, capabilities.minImageExtent.height, capabilities.maxImageExtent.height));
+
+    return actual_extent;
 }
 
 bool
@@ -436,6 +479,8 @@ queue families each having one or more queues. All queues in a queue family supp
 operations.
 
 https://www.khronos.org/registry/vulkan/specs/1.0/html/vkspec.html#devsandqueues-devices
+
+https://www.khronos.org/registry/vulkan/specs/1.0-wsi_extensions/html/vkspec.html#devsandqueues-queues
 */
 void
 renderer::createLogicalDevice()
@@ -472,6 +517,59 @@ renderer::createLogicalDevice()
 
     m_graphics_queue     = m_device->getQueue(indices.graphicsFamily(), 0);
     m_presentation_queue = m_device->getQueue(indices.presentFamily(), 0);
+}
+
+/*
+A swapchain is an abstraction for an array of presentable images that are associated with a surface.
+The presentable images are represented by VkImage objects created by the platform. One image (which
+can be an array image for multiview/stereoscopic-3D surfaces) is displayed at a time, but multiple
+images can be queued for presentation. An application renders to the image, and then queues the
+image for presentation to the surface.
+
+https://www.khronos.org/registry/vulkan/specs/1.0-wsi_extensions/html/vkspec.html#_wsi_swapchain
+*/
+void
+renderer::createSwapChain()
+{
+    SwapChainSupportDetails support = querySwapChainSupport(m_physical_device, m_surface.get());
+
+    vk::SurfaceFormatKHR surfaceformat = chooseSwapSurfaceFormat(support.formats);
+    vk::PresentModeKHR   presentmode   = chooseSwapPresentMode(support.presentModes);
+    vk::Extent2D         extent        = chooseSwapExtent(support.capabilities);
+
+    uint32_t imagecount = support.capabilities.minImageCount + 1;
+    if (support.capabilities.maxImageCount > 0 && imagecount > support.capabilities.maxImageCount) {
+        imagecount = support.capabilities.maxImageCount;
+    }
+
+    auto createinfo = vk::SwapchainCreateInfoKHR()
+                        .setSurface(m_surface.get())
+                        .setMinImageCount(imagecount)
+                        .setImageFormat(surfaceformat.format)
+                        .setImageColorSpace(surfaceformat.colorSpace)
+                        .setImageExtent(extent)
+                        .setImageArrayLayers(1)
+                        .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment);
+
+    QueueFamilyIndices indices = findQueueFamilies(m_physical_device, m_surface.get());
+
+    if (indices.graphicsFamily() != indices.presentFamily()) {
+        std::array<uint32_t, 2> queuefamilyindices = { (uint32_t)indices.graphicsFamily(),
+                                                       (uint32_t)indices.presentFamily() };
+        createinfo.setImageSharingMode(vk::SharingMode::eConcurrent)
+          .setQueueFamilyIndexCount(2)
+          .setPQueueFamilyIndices(queuefamilyindices.data());
+    } else {
+        createinfo.setImageSharingMode(vk::SharingMode::eExclusive);
+    }
+
+    createinfo.setPreTransform(support.capabilities.currentTransform)
+      .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque)
+      .setPresentMode(presentmode)
+      .setClipped(true)
+      .setOldSwapchain(nullptr);
+
+    m_swapchain.reset(m_device->createSwapchainKHR(createinfo));
 }
 
 void

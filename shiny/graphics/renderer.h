@@ -27,6 +27,7 @@ private:
     void createSurface();
     void pickPhysicalDevice();
     void createLogicalDevice();
+    void createSwapChain();
 
     GLFWwindow* m_window = nullptr;
 
@@ -38,6 +39,8 @@ private:
     vk::UniqueSurfaceKHR       m_surface;
     vk::PhysicalDevice         m_physical_device;
     vk::UniqueDevice           m_device;
+
+    vk::UniqueSwapchainKHR m_swapchain;
 
     vk::Queue m_graphics_queue;
     vk::Queue m_presentation_queue;
