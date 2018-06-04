@@ -10,7 +10,7 @@ namespace shiny::graphics {
 class renderer
 {
 public:
-    renderer() {}
+    explicit renderer() {}
 
     ~renderer() {}
 
@@ -28,6 +28,7 @@ private:
     void pickPhysicalDevice();
     void createLogicalDevice();
     void createSwapChain();
+    void createImageViews();
 
     GLFWwindow* m_window = nullptr;
 
@@ -40,7 +41,12 @@ private:
     vk::PhysicalDevice         m_physical_device;
     vk::UniqueDevice           m_device;
 
-    vk::UniqueSwapchainKHR m_swapchain;
+    // swapchain things
+    vk::SwapchainKHR                 m_swapchain;
+    std::vector<vk::UniqueImage>     m_swapchain_images;
+    std::vector<vk::UniqueImageView> m_swapchain_image_views;
+    vk::Format                       m_swapchain_image_format;
+    vk::Extent2D                     m_swapchain_extent;
 
     vk::Queue m_graphics_queue;
     vk::Queue m_presentation_queue;

@@ -569,7 +569,60 @@ renderer::createSwapChain()
       .setClipped(true)
       .setOldSwapchain(nullptr);
 
-    m_swapchain.reset(m_device->createSwapchainKHR(createinfo));
+    // m_swapchain.reset(m_device->createSwapchainKHR(createinfo));
+
+    m_swapchain = m_device->createSwapchainKHR(createinfo);
+
+    {
+        // auto images = m_device->getSwapchainImagesKHR(m_swapchain.get());
+        auto images = m_device->getSwapchainImagesKHR(m_swapchain);
+        m_swapchain_images.reserve(images.size());
+
+        for (const auto& image : images) {
+            m_swapchain_images.emplace_back(image);
+        }
+    }
+
+    m_swapchain_image_format = surfaceformat.format;
+    m_swapchain_extent       = extent;
+}
+
+/*
+Images represent multidimensional - up to 3 - arrays of data which can be used for various purposes
+(e.g. attachments, textures), by binding them to a graphics or compute pipeline via descriptor sets,
+or by directly specifying them as parameters to certain commands.
+
+To use any VkImage, including those in the swap chain, in the render pipeline we have to create a
+VkImageView object. An image view is quite literally a view into an image. It describes how to
+access the image and which part of the image to access, for example if it should be treated as a 2D
+texture depth texture without any mipmapping levels.
+
+https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#resources-images
+*/
+void
+renderer::createImageViews()
+{
+    m_swapchain_image_views.reserve(m_swapchain_images.size());
+
+    for (const vk::UniqueImage& image : m_swapchain_images) {
+        auto createinfo = vk::ImageViewCreateInfo()
+                            .setImage(image.get())
+                            .setViewType(vk::ImageViewType::e2D)
+                            .setFormat(m_swapchain_image_format)
+                            .setComponents(vk::ComponentMapping()
+                                             .setR(vk::ComponentSwizzle::eIdentity)
+                                             .setG(vk::ComponentSwizzle::eIdentity)
+                                             .setB(vk::ComponentSwizzle::eIdentity)
+                                             .setA(vk::ComponentSwizzle::eIdentity))
+                            .setSubresourceRange(vk::ImageSubresourceRange()
+                                                   .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                                                   .setBaseMipLevel(0)
+                                                   .setLevelCount(1)
+                                                   .setBaseArrayLayer(0)
+                                                   .setLayerCount(1));
+
+        m_swapchain_image_views.emplace_back(m_device->createImageView(createinfo));
+    }
 }
 
 void
@@ -580,6 +633,7 @@ renderer::initVulkan()
     createSurface();
     pickPhysicalDevice();
     createLogicalDevice();
+    createSwapChain();
 }
 
 void
@@ -593,10 +647,20 @@ renderer::mainLoop()
 void
 renderer::cleanup()
 {
-
     if (enableValidationLayers) {
         DestroyDebugReportCallbackEXT(m_instance.get(), m_callback);
     }
+
+    for (auto& imageview : m_swapchain_image_views) {
+        m_device->destroyImageView(imageview.release());
+    }
+
+    for (auto& image : m_swapchain_images) {
+        m_device->destroyImage(image.release());
+    }
+
+    // TODO: This crashes whether we use a smartpointer or not
+    // m_device->destroySwapchainKHR(m_swapchain);
 
     // vk::surfaceKHR objects do not have a destroy()
     // https://github.com/KhronosGroup/Vulkan-Hpp/issues/204
