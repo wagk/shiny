@@ -59,6 +59,7 @@ shadow map generation.
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <set>
@@ -390,6 +391,29 @@ getRequiredExtensions()
     }
 
     return extensions;
+}
+
+/*
+Now that we have a way of producing SPIR-V shaders, it's time to load them into our program to plug
+them into the graphics pipeline at some point. We'll first write a simple helper function to load
+the binary data from the files.
+*/
+std::vector<char>
+readFile(const std::string& filename)
+{
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open file for reading!");
+    }
+
+    size_t            filesize = (size_t)file.tellg();
+    std::vector<char> buffer(filesize);
+
+    file.seekg(0);
+    file.read(buffer.data(), filesize);
+
+    return buffer;
 }
 
 }  // namespace

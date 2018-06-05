@@ -128,6 +128,10 @@
     <PostBuildEvent>
       <Message>Copy the dlls over</Message>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>glslangValidator.exe -V $(ProjectDir)shaders\shader.vert -o $(ProjectDir)shaders\vert.spv
+glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders\frag.spv</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -182,6 +186,10 @@
     <PostBuildEvent>
       <Message>Copy the dlls over</Message>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>glslangValidator.exe -V $(ProjectDir)shaders\shader.vert -o $(ProjectDir)shaders\vert.spv
+glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders\frag.spv</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="graphics\renderer.cpp" />
