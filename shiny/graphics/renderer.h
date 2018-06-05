@@ -29,6 +29,7 @@ private:
     void createLogicalDevice();
     void createSwapChain();
     void createImageViews();
+    void createGraphicsPipeline();
 
     GLFWwindow* m_window = nullptr;
 
@@ -42,6 +43,7 @@ private:
     vk::UniqueDevice           m_device;
 
     // swapchain things
+    // TODO: Find a way to turn this back into a UniqueSwapchainKHR
     vk::SwapchainKHR                 m_swapchain;
     std::vector<vk::UniqueImage>     m_swapchain_images;
     std::vector<vk::UniqueImageView> m_swapchain_image_views;
