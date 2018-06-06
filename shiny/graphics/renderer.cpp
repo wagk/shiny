@@ -72,9 +72,12 @@ namespace {
 const uint32_t WIDTH  = 800;
 const uint32_t HEIGHT = 600;
 
-const std::vector<const char*> validationLayers = { "VK_LAYER_LUNARG_standard_validation" };
+using VulkanExtensionName = const char*;
+using VulkanLayerName     = const char*;
 
-const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+const std::vector<VulkanLayerName> validationLayers = { "VK_LAYER_LUNARG_standard_validation" };
+
+const std::vector<VulkanExtensionName> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
 #ifdef NDEBUG
 constexpr const bool enableValidationLayers = false;
@@ -377,14 +380,19 @@ checkValidationLayerSupport()
     return true;
 }
 
-std::vector<const char*>
+/*
+GLFW needs certain extensions to be present before it can work its windowing magic, and
+these are known through the glfwGetRequiredInstanceExtensions function
+*/
+std::vector<VulkanExtensionName>
 getRequiredExtensions()
 {
-    uint32_t     glfwExtensionCount = 0;
-    const char** glfwExtensions;
+    uint32_t             glfwExtensionCount = 0;
+    VulkanExtensionName* glfwExtensions;
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-    std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+    std::vector<VulkanExtensionName> extensions(glfwExtensions,
+                                                glfwExtensions + glfwExtensionCount);
 
     if (enableValidationLayers) {
         extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
@@ -393,12 +401,33 @@ getRequiredExtensions()
     return extensions;
 }
 
+
 /*
-Now that we have a way of producing SPIR-V shaders, it's time to load them into our program to plug
-them into the graphics pipeline at some point. We'll first write a simple helper function to load
-the binary data from the files.
+Creating a shader module is simple, we only need to specify a pointer to the buffer with the
+bytecode and the length of it. This information is specified in a VkShaderModuleCreateInfo
+structure. The one catch is that the size of the bytecode is specified in bytes, but the bytecode
+pointer is a uint32_t pointer rather than a char pointer. Therefore we will need to cast the pointer
+with reinterpret_cast as shown below. When you perform a cast like this, you also need to ensure
+that the data satisfies the alignment requirements of uint32_t. Lucky for us, the data is stored in
+an std::vector where the default allocator already ensures that the data satisfies the worst case
+alignment requirements.
 */
-std::vector<char>
+vk::ShaderModule
+createShaderModule(const shiny::graphics::SpirvBytecode& code, const vk::Device& device)
+{
+    vk::ShaderModuleCreateInfo create_info;
+    create_info.setCodeSize(code.size());
+    create_info.setPCode((const uint32_t*)code.data());
+
+    return device.createShaderModule(create_info);
+}
+
+/*
+Now that we have a way of producing SPIR-V shaders, it's time to load them into our program to
+plug them into the graphics pipeline at some point. We'll first write a simple helper function to
+load the binary data from the files.
+*/
+shiny::graphics::SpirvBytecode
 readFile(const std::string& filename)
 {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
@@ -413,7 +442,7 @@ readFile(const std::string& filename)
     file.seekg(0);
     file.read(buffer.data(), filesize);
 
-    return buffer;
+    return shiny::graphics::SpirvBytecode(buffer);
 }
 
 }  // namespace
@@ -461,8 +490,8 @@ renderer::createInstance()
                      .setEngineVersion(VK_MAKE_VERSION(1, 0, 0))
                      .setApiVersion(VK_API_VERSION_1_0);
 
-    uint32_t     glfwExtensionCount = 0;
-    const char** glfwExtensions     = nullptr;
+    uint32_t             glfwExtensionCount = 0;
+    VulkanExtensionName* glfwExtensions     = nullptr;
 
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
@@ -480,7 +509,7 @@ renderer::createInstance()
     createinfo.setEnabledExtensionCount((uint32_t)extensions.size());
     createinfo.setPpEnabledExtensionNames(extensions.data());
 
-    m_instance.reset(vk::createInstance(createinfo, nullptr));
+    m_instance = vk::createInstance(createinfo);
 
     // for debugging
     {
@@ -505,7 +534,7 @@ renderer::setupDebugCallback()
                         .setPfnCallback(debugCallback)
                         .setFlags(DebugFlags::eError | DebugFlags::eWarning);
 
-    if (CreateDebugReportCallbackEXT(m_instance.get(), createinfo, m_callback) != VK_SUCCESS) {
+    if (CreateDebugReportCallbackEXT(m_instance, createinfo, m_callback) != VK_SUCCESS) {
         throw std::runtime_error("Failed to set up debug callback!");
     }
 }
@@ -520,10 +549,10 @@ void
 renderer::createSurface()
 {
     VkSurfaceKHR surface;
-    if (glfwCreateWindowSurface(m_instance.get(), m_window, nullptr, &surface) != VK_SUCCESS) {
+    if (glfwCreateWindowSurface(m_instance, m_window, nullptr, &surface) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create window surface!");
     }
-    m_surface.reset(surface);
+    m_surface = surface;
 }
 
 /*
@@ -537,13 +566,13 @@ Physical devices don't have deleter functions, since they're not actually alloca
 void
 renderer::pickPhysicalDevice()
 {
-    std::vector<vk::PhysicalDevice> physical_devices = m_instance->enumeratePhysicalDevices();
+    std::vector<vk::PhysicalDevice> physical_devices = m_instance.enumeratePhysicalDevices();
 
     if (physical_devices.empty())
         throw std::runtime_error("Failed to find a GPU with Vulkan support!");
 
     for (const auto& device : physical_devices) {
-        if (isDeviceSuitable(device, m_surface.get())) {
+        if (isDeviceSuitable(device, m_surface)) {
             m_physical_device = device;
             break;
         }
@@ -565,7 +594,7 @@ https://www.khronos.org/registry/vulkan/specs/1.0-wsi_extensions/html/vkspec.htm
 void
 renderer::createLogicalDevice()
 {
-    QueueFamilyIndices indices = findQueueFamilies(m_physical_device, m_surface.get());
+    QueueFamilyIndices indices = findQueueFamilies(m_physical_device, m_surface);
 
     float queuepriority = 1.f;
 
@@ -593,10 +622,10 @@ renderer::createLogicalDevice()
         createinfo.setPpEnabledLayerNames(validationLayers.data());
     }
 
-    m_device.reset(m_physical_device.createDevice(createinfo));
+    m_device = m_physical_device.createDevice(createinfo);
 
-    m_graphics_queue     = m_device->getQueue(indices.graphicsFamily(), 0);
-    m_presentation_queue = m_device->getQueue(indices.presentFamily(), 0);
+    m_graphics_queue     = m_device.getQueue(indices.graphicsFamily(), 0);
+    m_presentation_queue = m_device.getQueue(indices.presentFamily(), 0);
 }
 
 /*
@@ -611,7 +640,7 @@ https://www.khronos.org/registry/vulkan/specs/1.0-wsi_extensions/html/vkspec.htm
 void
 renderer::createSwapChain()
 {
-    SwapChainSupportDetails support = querySwapChainSupport(m_physical_device, m_surface.get());
+    SwapChainSupportDetails support = querySwapChainSupport(m_physical_device, m_surface);
 
     vk::SurfaceFormatKHR surfaceformat = chooseSwapSurfaceFormat(support.formats);
     vk::PresentModeKHR   presentmode   = chooseSwapPresentMode(support.presentModes);
@@ -623,7 +652,7 @@ renderer::createSwapChain()
     }
 
     auto createinfo = vk::SwapchainCreateInfoKHR()
-                        .setSurface(m_surface.get())
+                        .setSurface(m_surface)
                         .setMinImageCount(imagecount)
                         .setImageFormat(surfaceformat.format)
                         .setImageColorSpace(surfaceformat.colorSpace)
@@ -631,7 +660,7 @@ renderer::createSwapChain()
                         .setImageArrayLayers(1)
                         .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment);
 
-    QueueFamilyIndices indices = findQueueFamilies(m_physical_device, m_surface.get());
+    QueueFamilyIndices indices = findQueueFamilies(m_physical_device, m_surface);
 
     if (indices.graphicsFamily() != indices.presentFamily()) {
         std::array<uint32_t, 2> queuefamilyindices = { (uint32_t)indices.graphicsFamily(),
@@ -651,11 +680,11 @@ renderer::createSwapChain()
 
     // m_swapchain.reset(m_device->createSwapchainKHR(createinfo));
 
-    m_swapchain = m_device->createSwapchainKHR(createinfo);
+    m_swapchain = m_device.createSwapchainKHR(createinfo);
 
     {
         // auto images = m_device->getSwapchainImagesKHR(m_swapchain.get());
-        auto images = m_device->getSwapchainImagesKHR(m_swapchain);
+        auto images = m_device.getSwapchainImagesKHR(m_swapchain);
         m_swapchain_images.reserve(images.size());
 
         for (const auto& image : images) {
@@ -684,9 +713,9 @@ renderer::createImageViews()
 {
     m_swapchain_image_views.reserve(m_swapchain_images.size());
 
-    for (const vk::UniqueImage& image : m_swapchain_images) {
+    for (const vk::Image& image : m_swapchain_images) {
         auto createinfo = vk::ImageViewCreateInfo()
-                            .setImage(image.get())
+                            .setImage(image)
                             .setViewType(vk::ImageViewType::e2D)
                             .setFormat(m_swapchain_image_format)
                             .setComponents(vk::ComponentMapping()
@@ -701,13 +730,37 @@ renderer::createImageViews()
                                                    .setBaseArrayLayer(0)
                                                    .setLayerCount(1));
 
-        m_swapchain_image_views.emplace_back(m_device->createImageView(createinfo));
+        m_swapchain_image_views.emplace_back(m_device.createImageView(createinfo));
     }
 }
 
 void
 renderer::createGraphicsPipeline()
-{}
+{
+    auto vertshadercode = readFile("shaders/vert.spv");
+    auto fragshadercode = readFile("shaders/frag.spv");
+
+    m_vertex_shader_module   = createShaderModule(vertshadercode, m_device);
+    m_fragment_shader_module = createShaderModule(fragshadercode, m_device);
+
+    auto vertex_stagecreateinfo =
+      vk::PipelineShaderStageCreateInfo()
+        .setStage(vk::ShaderStageFlagBits::eVertex)
+        .setModule(m_vertex_shader_module)
+        .setPName("main");  // this is the main entry point of the shader
+
+    auto fragment_stagecreateinfo =
+      vk::PipelineShaderStageCreateInfo()
+        .setStage(vk::ShaderStageFlagBits::eFragment)
+        .setModule(m_fragment_shader_module)
+        .setPName("main");  // this is the main entry point of the shader
+
+    vk::PipelineShaderStageCreateInfo shaderstages[] = { vertex_stagecreateinfo,
+                                                         fragment_stagecreateinfo };
+
+    // Up next:
+    // https://vulkan-tutorial.com/Drawing_a_triangle/Graphics_pipeline_basics/Fixed_functions
+}
 
 void
 renderer::initVulkan()
@@ -718,6 +771,8 @@ renderer::initVulkan()
     pickPhysicalDevice();
     createLogicalDevice();
     createSwapChain();
+    createImageViews();
+    createGraphicsPipeline();
 }
 
 void
@@ -731,24 +786,28 @@ renderer::mainLoop()
 void
 renderer::cleanup()
 {
-    if (enableValidationLayers) {
-        DestroyDebugReportCallbackEXT(m_instance.get(), m_callback);
-    }
 
     for (auto& imageview : m_swapchain_image_views) {
-        m_device->destroyImageView(imageview.release());
+        m_device.destroyImageView(imageview);
     }
 
-    for (auto& image : m_swapchain_images) {
-        m_device->destroyImage(image.release());
-    }
+    m_device.destroySwapchainKHR(m_swapchain);
+
+    m_device.destroyShaderModule(m_vertex_shader_module);
+    m_device.destroyShaderModule(m_fragment_shader_module);
+
+    m_device.destroy();
 
     // TODO: This crashes whether we use a smartpointer or not
     // m_device->destroySwapchainKHR(m_swapchain);
 
+    if (enableValidationLayers) {
+        DestroyDebugReportCallbackEXT(m_instance, m_callback);
+    }
     // vk::surfaceKHR objects do not have a destroy()
     // https://github.com/KhronosGroup/Vulkan-Hpp/issues/204
-    m_instance->destroySurfaceKHR(m_surface.release());
+    m_instance.destroySurfaceKHR(m_surface);
+    m_instance.destroy();
 
     glfwDestroyWindow(m_window);
     glfwTerminate();

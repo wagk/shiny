@@ -7,6 +7,8 @@
 
 namespace shiny::graphics {
 
+using SpirvBytecode = std::vector<char>;
+
 class renderer
 {
 public:
@@ -36,19 +38,22 @@ private:
     // can't use UniqueDebugReportCallbackEXT because of
     // https://github.com/KhronosGroup/Vulkan-Hpp/issues/212
 
-    vk::UniqueInstance         m_instance;
+    vk::Instance               m_instance;
     vk::DebugReportCallbackEXT m_callback;
-    vk::UniqueSurfaceKHR       m_surface;
+    vk::SurfaceKHR             m_surface;
     vk::PhysicalDevice         m_physical_device;
-    vk::UniqueDevice           m_device;
+    vk::Device                 m_device;
 
     // swapchain things
     // TODO: Find a way to turn this back into a UniqueSwapchainKHR
-    vk::SwapchainKHR                 m_swapchain;
-    std::vector<vk::UniqueImage>     m_swapchain_images;
-    std::vector<vk::UniqueImageView> m_swapchain_image_views;
-    vk::Format                       m_swapchain_image_format;
-    vk::Extent2D                     m_swapchain_extent;
+    vk::SwapchainKHR           m_swapchain;
+    std::vector<vk::Image>     m_swapchain_images;
+    std::vector<vk::ImageView> m_swapchain_image_views;
+    vk::Format                 m_swapchain_image_format;
+    vk::Extent2D               m_swapchain_extent;
+
+    vk::ShaderModule m_vertex_shader_module;
+    vk::ShaderModule m_fragment_shader_module;
 
     vk::Queue m_graphics_queue;
     vk::Queue m_presentation_queue;
