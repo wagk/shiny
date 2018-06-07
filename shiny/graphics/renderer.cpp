@@ -734,6 +734,32 @@ renderer::createImageViews()
     }
 }
 
+/*
+Graphics pipelines consist of multiple shader stages, multiple fixed-function pipeline stages, and a
+pipeline layout.
+
+Each pipeline is controlled by a monolithic object created from a description of all of the shader
+stages and any relevant fixed-function stages. Linking the whole pipeline together allows the
+optimization of shaders based on their input/outputs and eliminates expensive draw time state
+validation.
+
+A pipeline object is bound to the device state in command buffers. Any pipeline object state that is
+marked as dynamic is not applied to the device state when the pipeline is bound. Dynamic state not
+set by binding the pipeline object can be modified at any time and persists for the lifetime of the
+command buffer, or until modified by another dynamic state command or another pipeline bind. No
+state, including dynamic state, is inherited from one command buffer to another. Only dynamic state
+that is required for the operations performed in the command buffer needs to be set. For example, if
+blending is disabled by the pipeline state then the dynamic color blend constants do not need to be
+specified in the command buffer, even if this state is marked as dynamic in the pipeline state
+object. If a new pipeline object is bound with state not marked as dynamic after a previous pipeline
+object with that same state as dynamic, the new pipeline object state will override the dynamic
+state. Modifying dynamic state that is not set as dynamic by the pipeline state object will lead to
+undefined results.
+
+https://www.khronos.org/registry/vulkan/specs/1.0-wsi_extensions/html/vkspec.html#pipelines-graphics
+
+https://vulkan-tutorial.com/Drawing_a_triangle/Graphics_pipeline_basics/Fixed_functions
+*/
 void
 renderer::createGraphicsPipeline()
 {
@@ -758,8 +784,31 @@ renderer::createGraphicsPipeline()
     vk::PipelineShaderStageCreateInfo shaderstages[] = { vertex_stagecreateinfo,
                                                          fragment_stagecreateinfo };
 
-    // Up next:
-    // https://vulkan-tutorial.com/Drawing_a_triangle/Graphics_pipeline_basics/Fixed_functions
+    // vertex input
+    auto vert_inputinfo = vk::PipelineVertexInputStateCreateInfo();
+
+    // input assembly
+    auto inputassembly = vk::PipelineInputAssemblyStateCreateInfo()
+                           .setTopology(vk::PrimitiveTopology::eTriangleList)
+                           .setPrimitiveRestartEnable(false);
+    // viewports and scissors
+    auto viewport = vk::Viewport()
+                      .setX(0.f)
+                      .setY(0.f)
+                      .setWidth(m_swapchain_extent.width)
+                      .setHeight(m_swapchain_extent.height)
+                      .setMinDepth(0.f)
+                      .setMaxDepth(1.f);
+
+    auto scissor = vk::Rect2D().setOffset(vk::Offset2D(0, 0)).setExtent(m_swapchain_extent);
+
+    auto viewportstate = vk::PipelineViewportStateCreateInfo()
+                           .setViewportCount(1)
+                           .setPViewports(&viewport)
+                           .setScissorCount(1)
+                           .setPScissors(&scissor);
+
+    // rasterisation
 }
 
 void
