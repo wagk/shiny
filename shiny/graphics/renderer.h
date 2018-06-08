@@ -55,6 +55,9 @@ private:
     vk::ShaderModule m_vertex_shader_module;
     vk::ShaderModule m_fragment_shader_module;
 
+    // used to define shader uniform value layouts
+    vk::PipelineLayout m_pipeline_layout;
+
     vk::Queue m_graphics_queue;
     vk::Queue m_presentation_queue;
 };
