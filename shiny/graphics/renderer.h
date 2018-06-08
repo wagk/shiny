@@ -31,6 +31,7 @@ private:
     void createLogicalDevice();
     void createSwapChain();
     void createImageViews();
+    void createRenderPass();
     void createGraphicsPipeline();
 
     GLFWwindow* m_window = nullptr;
@@ -55,8 +56,9 @@ private:
     vk::ShaderModule m_vertex_shader_module;
     vk::ShaderModule m_fragment_shader_module;
 
-    // used to define shader uniform value layouts
-    vk::PipelineLayout m_pipeline_layout;
+    vk::RenderPass     m_render_pass;
+    vk::PipelineLayout m_pipeline_layout;  // used to define shader uniform value layouts
+    vk::Pipeline       m_graphics_pipeline;
 
     vk::Queue m_graphics_queue;
     vk::Queue m_presentation_queue;

@@ -735,6 +735,75 @@ renderer::createImageViews()
 }
 
 /*
+Before we can finish creating the pipeline, we need to tell Vulkan about the framebuffer attachments
+that will be used while rendering. We need to specify how many color and depth buffers there will
+be, how many samples to use for each of them and how their contents should be handled throughout the
+rendering operations. All of this information is wrapped in a render pass object.
+*/
+void
+renderer::createRenderPass()
+{
+    auto colorattachment =
+      vk::AttachmentDescription()
+        // The format of the color attachment should match the format of the swap chain images.
+        .setFormat(m_swapchain_image_format)
+        // we're not doing anything with multisampling
+        .setSamples(vk::SampleCountFlagBits::e1)
+        // The loadOp determines what to do with the data in the attachment before rendering
+        .setLoadOp(vk::AttachmentLoadOp::eClear)
+        // The storeOp determines what to do with the data in the attachment after
+        // rendering.
+        .setStoreOp(vk::AttachmentStoreOp::eStore)
+        // We don't care what the initial memory layout of the VkImage is
+        .setInitialLayout(vk::ImageLayout::eUndefined)
+        // We wnat the final layout of the VkImage to be something that can be presented in the swap
+        // chain
+        .setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+
+    // A single render pass can consist of multiple subpasses. Subpasses are subsequent rendering
+    // operations that depend on the contents of framebuffers in previous passes, for example a
+    // sequence of post-processing effects that are applied one after another. If you group these
+    // rendering operations into one render pass, then Vulkan is able to reorder the operations and
+    // conserve memory bandwidth for possibly better performance. For our very first triangle,
+    // however, we'll stick to a single subpass.
+
+    // Every subpass references one or more of the attachments that we've described using the
+    // structure in the previous sections.
+    auto colorattachmentref = vk::AttachmentReference()
+                                // The attachment parameter specifies which attachment to reference
+                                // by its index in the attachment descriptions array. Our array
+                                // consists of a single VkAttachmentDescription, so its index is 0
+                                .setAttachment(0)
+                                // The layout specifies which layout we would like the attachment to
+                                // have during a subpass that uses this reference.
+                                .setLayout(vk::ImageLayout::eColorAttachmentOptimal);
+
+    auto subpass = vk::SubpassDescription()
+                     // Vulkan may also support compute subpasses in the future, so we have to be
+                     // explicit about this being a graphics subpass.
+                     .setPipelineBindPoint(vk::PipelineBindPoint::eGraphics)
+                     // The index of the attachment in this array is directly referenced from the
+                     // fragment shader with the layout(location = 0) out vec4 outColor directive!
+                     .setColorAttachmentCount(1)
+                     // vk::AttachmentReference, not the vk::AttachmentDescription itself
+                     // The following other types of attachments can be referenced by a subpass:
+                     // pInputAttachments: Attachments that are read from a shader
+                     // pResolveAttachments: Attachments used for multisampling color attachments
+                     // pDepthStencilAttachment: Attachments for depth and stencil data
+                     // pPreserveAttachments: Attachments that are not used by this subpass, but for
+                     // which the data must be preserved
+                     .setPColorAttachments(&colorattachmentref);
+
+    auto renderpasscreateinfo = vk::RenderPassCreateInfo()
+                                  .setAttachmentCount(1)
+                                  .setPAttachments(&colorattachment)
+                                  .setSubpassCount(1)
+                                  .setPSubpasses(&subpass);
+
+    m_render_pass = m_device.createRenderPass(renderpasscreateinfo);
+}
+
+/*
 Graphics pipelines consist of multiple shader stages, multiple fixed-function pipeline stages, and a
 pipeline layout.
 
@@ -781,8 +850,9 @@ renderer::createGraphicsPipeline()
         .setModule(m_fragment_shader_module)
         .setPName("main");  // this is the main entry point of the shader
 
-    vk::PipelineShaderStageCreateInfo shaderstages[] = { vertex_stagecreateinfo,
-                                                         fragment_stagecreateinfo };
+    auto shaderstages =
+      std::array<vk::PipelineShaderStageCreateInfo, 2>{ vertex_stagecreateinfo,
+                                                        fragment_stagecreateinfo };
 
     // vertex input
     // The VkPipelineVertexInputStateCreateInfo structure describes the format of the vertex data
@@ -791,7 +861,7 @@ renderer::createGraphicsPipeline()
     //    instancing)
     //  - Attribute descriptions: type of the attributes passed to the vertex shader,
     //    which binding to load them from and at which offset
-    auto vert_inputinfo = vk::PipelineVertexInputStateCreateInfo();
+    auto vertexinputinfo = vk::PipelineVertexInputStateCreateInfo();
 
     // The VkPipelineInputAssemblyStateCreateInfo struct describes two things: what kind of geometry
     // will be drawn from the vertices and if primitive restart should be enabled.
@@ -804,8 +874,8 @@ renderer::createGraphicsPipeline()
     auto viewport = vk::Viewport()
                       .setX(0.f)
                       .setY(0.f)
-                      .setWidth(m_swapchain_extent.width)
-                      .setHeight(m_swapchain_extent.height)
+                      .setWidth((float)m_swapchain_extent.width)
+                      .setHeight((float)m_swapchain_extent.height)
                       .setMinDepth(0.f)
                       .setMaxDepth(1.f);
 
@@ -914,10 +984,32 @@ renderer::createGraphicsPipeline()
     // or to create texture samplers in the fragment shader.
     // These uniform values need to be specified during pipeline creation by creating a
     // VkPipelineLayout object.
-
     auto pipelinelayout = vk::PipelineLayoutCreateInfo();
 
     m_pipeline_layout = m_device.createPipelineLayout(pipelinelayout);
+
+    auto pipelinecreateinfo =
+      vk::GraphicsPipelineCreateInfo()
+        .setStageCount(2)
+        .setPStages(shaderstages.data())
+        .setPVertexInputState(&vertexinputinfo)
+        .setPInputAssemblyState(&inputassembly)
+        .setPViewportState(&viewportstate)
+        .setPRasterizationState(&rasterizer)
+        .setPMultisampleState(&multisampling)
+        .setPColorBlendState(&colorblending)
+        .setLayout(m_pipeline_layout)
+        // And finally we have the reference to the render pass. It is also possible to use other
+        // render passes with this pipeline instead of this specific instance, but they have to be
+        // compatible with renderPass. The requirements for compatibility are described
+        // https://www.khronos.org/registry/vulkan/specs/1.0/html/vkspec.html#renderpass-compatibility
+        .setRenderPass(m_render_pass)
+        // The index of the sub pass where this graphics pipeline will be used.
+        .setSubpass(0);
+
+    // We pass a nullptr into the argument that requests for a vk::PipelineCache, since we don't
+    // need one
+    m_graphics_pipeline = m_device.createGraphicsPipeline(nullptr, pipelinecreateinfo);
 }
 
 void
@@ -930,6 +1022,7 @@ renderer::initVulkan()
     createLogicalDevice();
     createSwapChain();
     createImageViews();
+    createRenderPass();
     createGraphicsPipeline();
 }
 
@@ -949,7 +1042,9 @@ renderer::cleanup()
         m_device.destroyImageView(imageview);
     }
 
+    m_device.destroyPipeline(m_graphics_pipeline);
     m_device.destroyPipelineLayout(m_pipeline_layout);
+    m_device.destroyRenderPass(m_render_pass);
 
     m_device.destroySwapchainKHR(m_swapchain);
 
@@ -957,9 +1052,6 @@ renderer::cleanup()
     m_device.destroyShaderModule(m_fragment_shader_module);
 
     m_device.destroy();
-
-    // TODO: This crashes whether we use a smartpointer or not
-    // m_device->destroySwapchainKHR(m_swapchain);
 
     if (enableValidationLayers) {
         DestroyDebugReportCallbackEXT(m_instance, m_callback);
