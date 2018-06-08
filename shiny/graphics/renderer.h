@@ -33,6 +33,7 @@ private:
     void createImageViews();
     void createRenderPass();
     void createGraphicsPipeline();
+    void createFramebuffers();
 
     GLFWwindow* m_window = nullptr;
 
@@ -47,11 +48,12 @@ private:
 
     // swapchain things
     // TODO: Find a way to turn this back into a UniqueSwapchainKHR
-    vk::SwapchainKHR           m_swapchain;
-    std::vector<vk::Image>     m_swapchain_images;
-    std::vector<vk::ImageView> m_swapchain_image_views;
-    vk::Format                 m_swapchain_image_format;
-    vk::Extent2D               m_swapchain_extent;
+    vk::SwapchainKHR             m_swapchain;
+    std::vector<vk::Image>       m_swapchain_images;
+    std::vector<vk::ImageView>   m_swapchain_image_views;
+    vk::Format                   m_swapchain_image_format;
+    vk::Extent2D                 m_swapchain_extent;
+    std::vector<vk::Framebuffer> m_swapchain_framebuffers;
 
     vk::ShaderModule m_vertex_shader_module;
     vk::ShaderModule m_fragment_shader_module;
