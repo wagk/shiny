@@ -1024,7 +1024,27 @@ https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#Vk
 */
 void
 renderer::createFramebuffers()
-{}
+{
+    m_swapchain_framebuffers.reserve(m_swapchain_image_views.size());
+
+    for (const auto& view : m_swapchain_image_views) {
+        auto framebufferinfo = vk::FramebufferCreateInfo()
+                                 .setRenderPass(m_render_pass)
+                                 // The attachmentCount and pAttachments parameters specify the
+                                 // VkImageView objects that should be bound to the respective
+                                 // attachment descriptions in the render pass pAttachment array.
+                                 .setAttachmentCount(1)
+                                 .setPAttachments(&view)
+                                 .setWidth(m_swapchain_extent.width)
+                                 .setHeight(m_swapchain_extent.height)
+                                 // layers refers to the number of layers in image arrays. Our swap
+                                 // chain images are single images, so the number of layers is 1.
+                                 .setLayers(1);
+
+        auto framebuffer = m_device.createFramebuffer(framebufferinfo);
+        m_swapchain_framebuffers.emplace_back(framebuffer);
+    }
+}
 
 void
 renderer::initVulkan()
@@ -1038,6 +1058,7 @@ renderer::initVulkan()
     createImageViews();
     createRenderPass();
     createGraphicsPipeline();
+    createFramebuffers();
 }
 
 void
@@ -1051,7 +1072,9 @@ renderer::mainLoop()
 void
 renderer::cleanup()
 {
-
+    for (auto& framebuffer : m_swapchain_framebuffers) {
+        m_device.destroyFramebuffer(framebuffer);
+    }
     for (auto& imageview : m_swapchain_image_views) {
         m_device.destroyImageView(imageview);
     }
