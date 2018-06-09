@@ -34,6 +34,7 @@ private:
     void createRenderPass();
     void createGraphicsPipeline();
     void createFramebuffers();
+    void createCommandPool();
 
     GLFWwindow* m_window = nullptr;
 
@@ -61,6 +62,8 @@ private:
     vk::RenderPass     m_render_pass;
     vk::PipelineLayout m_pipeline_layout;  // used to define shader uniform value layouts
     vk::Pipeline       m_graphics_pipeline;
+
+    vk::CommandPool m_command_pool;
 
     vk::Queue m_graphics_queue;
     vk::Queue m_presentation_queue;

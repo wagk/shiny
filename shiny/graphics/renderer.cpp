@@ -1046,6 +1046,29 @@ renderer::createFramebuffers()
     }
 }
 
+/*
+Commands in Vulkan, like drawing operations and memory transfers, are not executed directly using
+function calls. You have to record all of the operations you want to perform in command buffer
+objects. The advantage of this is that all of the hard work of setting up the drawing commands can
+be done in advance and in multiple threads. After that, you just have to tell Vulkan to execute the
+commands in the main loop.
+
+https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#VkCommandPool
+*/
+void
+renderer::createCommandPool()
+{
+    auto indices = findQueueFamilies(m_physical_device, m_surface);
+
+    auto commandpoolinfo =
+      vk::CommandPoolCreateInfo()
+        // Command buffers are executed by submitting them on one of the device queues, like the
+        // graphics and presentation queues we retrieved. Each command pool can only allocate
+        // command buffers that are submitted on a single type of queue. We're going to record
+        // commands for drawing, which is why we've chosen the graphics queue family.
+        .setQueueFamilyIndex(indices.graphicsFamily());
+}
+
 void
 renderer::initVulkan()
 {
