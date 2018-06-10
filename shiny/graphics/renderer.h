@@ -17,6 +17,7 @@ public:
     ~renderer() {}
 
     void run();
+    void drawFrame();
 
 private:
     void initWindow();
@@ -35,6 +36,8 @@ private:
     void createGraphicsPipeline();
     void createFramebuffers();
     void createCommandPool();
+    void createCommandBuffers();
+    void createSemaphores();
 
     GLFWwindow* m_window = nullptr;
 
@@ -63,7 +66,11 @@ private:
     vk::PipelineLayout m_pipeline_layout;  // used to define shader uniform value layouts
     vk::Pipeline       m_graphics_pipeline;
 
-    vk::CommandPool m_command_pool;
+    vk::CommandPool                m_command_pool;
+    std::vector<vk::CommandBuffer> m_command_buffers;
+
+    vk::Semaphore m_image_available_semaphore;
+    vk::Semaphore m_render_finished_semaphore;
 
     vk::Queue m_graphics_queue;
     vk::Queue m_presentation_queue;

@@ -458,6 +458,32 @@ renderer::run()
     cleanup();
 }
 
+/*
+The drawFrame function will perform the following operations:
+
+ -  Acquire an image from the swap chain
+ -  Execute the command buffer with that image as attachment in the framebuffer
+ -  Return the image to the swap chain for presentation
+
+Each of these events is set in motion using a single function call, but they are executed
+asynchronously. The function calls will return before the operations are actually finished and the
+order of execution is also undefined. That is unfortunate, because each of the operations depends on
+the previous one finishing.
+
+There are two ways of synchronizing swap chain events: fences and semaphores. They're both objects
+that can be used for coordinating operations by having one operation signal and another operation
+wait for a fence or semaphore to go from the unsignaled to signaled state.
+
+The difference is that the state of fences can be accessed from your program using calls like
+vkWaitForFences and semaphores cannot be. Fences are mainly designed to synchronize your application
+itself with rendering operation, whereas semaphores are used to synchronize operations within or
+across command queues. We want to synchronize the queue operations of draw commands and
+presentation, which makes semaphores the best fit.
+*/
+void
+renderer::drawFrame()
+{}
+
 void
 renderer::initWindow()
 {
@@ -1027,7 +1053,7 @@ renderer::createFramebuffers()
 {
     m_swapchain_framebuffers.reserve(m_swapchain_image_views.size());
 
-    for (const auto& view : m_swapchain_image_views) {
+    for (auto const& view : m_swapchain_image_views) {
         auto framebufferinfo = vk::FramebufferCreateInfo()
                                  .setRenderPass(m_render_pass)
                                  // The attachmentCount and pAttachments parameters specify the
@@ -1053,6 +1079,9 @@ objects. The advantage of this is that all of the hard work of setting up the dr
 be done in advance and in multiple threads. After that, you just have to tell Vulkan to execute the
 commands in the main loop.
 
+We have to create a command pool before we can create command buffers. Command pools manage the
+memory that is used to store the buffers and command buffers are allocated from them.
+
 https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#VkCommandPool
 */
 void
@@ -1067,6 +1096,174 @@ renderer::createCommandPool()
         // command buffers that are submitted on a single type of queue. We're going to record
         // commands for drawing, which is why we've chosen the graphics queue family.
         .setQueueFamilyIndex(indices.graphicsFamily());
+
+    m_command_pool = m_device.createCommandPool(commandpoolinfo);
+}
+
+/*
+Command buffers are automatically freed when their command pools are destroyed
+
+Command buffers are objects used to record commands which can be subsequently submitted to a device
+queue for execution. There are two levels of command buffers - primary command buffers, which can
+execute secondary command buffers, and which are submitted to queues, and secondary command buffers,
+which can be executed by primary command buffers, and which are not directly submitted to queues.
+
+Recorded commands include commands to bind pipelines and descriptor sets to the command buffer,
+commands to modify dynamic state, commands to draw (for graphics rendering), commands to dispatch
+(for compute), commands to execute secondary command buffers (for primary command buffers only),
+commands to copy buffers and images, and other commands.
+
+Each command buffer manages state independently of other command buffers. There is no inheritance of
+state across primary and secondary command buffers, or between secondary command buffers. When a
+command buffer begins recording, all state in that command buffer is undefined. When secondary
+command buffer(s) are recorded to execute on a primary command buffer, the secondary command buffer
+inherits no state from the primary command buffer, and all state of the primary command buffer is
+undefined after an execute secondary command buffer command is recorded. There is one exception to
+this rule - if the primary command buffer is inside a render pass instance, then the render pass and
+subpass state is not disturbed by executing secondary command buffers. Whenever the state of a
+command buffer is undefined, the application must set all relevant state on the command buffer
+before any state dependent commands such as draws and dispatches are recorded, otherwise the
+behavior of executing that command buffer is undefined.
+
+Unless otherwise specified, and without explicit synchronization, the various commands submitted to
+a queue via command buffers may execute in arbitrary order relative to each other, and/or
+concurrently. Also, the memory side-effects of those commands may not be directly visible to other
+commands without explicit memory dependencies. This is true within a command buffer, and across
+command buffers submitted to a given queue.
+
+https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#VkCommandBuffer
+*/
+void
+renderer::createCommandBuffers()
+{
+    auto allocinfo =
+      vk::CommandBufferAllocateInfo()
+        .setCommandPool(m_command_pool)
+        // The level parameter specifies if the allocated command buffers are primary or secondary
+        // command buffers.
+        //  - VK_COMMAND_BUFFER_LEVEL_PRIMARY: Can be submitted to a queue for execution, but cannot
+        //  be called from other command buffers.
+        //  - VK_COMMAND_BUFFER_LEVEL_SECONDARY: Cannot be submitted directly, but can be called
+        //  from primary command buffers.
+        // We won't make use of the secondary command buffer functionality here, but you can imagine
+        // that it's helpful to reuse common operations from primary command buffers.
+        .setLevel(vk::CommandBufferLevel::ePrimary)
+        .setCommandBufferCount((uint32_t)m_swapchain_framebuffers.size());
+
+    m_command_buffers = m_device.allocateCommandBuffers(allocinfo);
+
+    // We begin recording a command buffer by calling vkBeginCommandBuffer with a small
+    // VkCommandBufferBeginInfo structure as argument that specifies some details about the usage of
+    // this specific command buffer.whereupon which we can use vkCmd*-named calls to record draw
+    // commands/dispatch compute commands
+
+    for (size_t i = 0; i < m_command_buffers.size(); ++i) {
+        auto const& command_buffer = m_command_buffers[i];
+        auto        begininfo =
+          vk::CommandBufferBeginInfo()
+            // The flags parameter specifies how we're going to use the command buffer. The
+            // following values are available:
+            //  - VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: The command buffer will be rerecorded
+            //    right after executing it once.
+            //  - VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT:
+            //    This is a secondary command buffer that will be entirely within a single render
+            //    pass.
+            //  - VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT: The command buffer can be
+            //    resubmitted while it is also already pending execution.
+            // We have used the last flag because we may already be scheduling the drawing commands
+            // for the next frame while the last frame is not finished yet.
+            .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse);
+
+        {
+            command_buffer.begin(begininfo);  // wraps vkCmdBeginRenderPass
+
+            auto const& framebuffer = m_swapchain_framebuffers[i];
+            auto        clearcolor  = vk::ClearValue(std::array<float, 4>{ 0.f, 0.f, 0.f, 1.f });
+            auto        renderarea  = vk::Rect2D({ 0, 0 }, m_swapchain_extent);
+
+            auto renderpassinfo =
+              vk::RenderPassBeginInfo()
+                // The first parameters are the render pass itself and the attachments to bind. We
+                // created a framebuffer for each swap chain image that specifies it as color
+                // attachment.
+                .setRenderPass(m_render_pass)
+                .setFramebuffer(framebuffer)
+                // The render area defines where shader loads and stores will take place. The pixels
+                // outside this region will have undefined values. It should match the size of the
+                // attachments for best performance.
+                .setRenderArea(renderarea)
+                // The last two parameters define the clear values to use for
+                // VK_ATTACHMENT_LOAD_OP_CLEAR, which we used as load operation for the color
+                // attachment. I've defined the clear color to simply be black with 100% opacity.
+                .setClearValueCount(1)
+                .setPClearValues(&clearcolor);
+
+            // The render pass can now begin. All of the functions that record commands can be
+            // recognized by their vkCmd prefix. They all return void, so there will be no error
+            // handling until we've finished recording.
+            // The first parameter for every command is always the command buffer to record the
+            // command to. The second parameter specifies the details of the render pass we've just
+            // provided. The final parameter controls how the drawing commands within the render
+            // pass will be provided. It can have one of two values:
+            //  - VK_SUBPASS_CONTENTS_INLINE: The render pass commands will be embedded in the
+            //    primary command buffer itself and no secondary command buffers will be executed.
+            //  - VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS: The render pass commands will be
+            //    executed from secondary command buffers.
+            // We will not be using secondary command buffers, so we'll go with the first option.
+            command_buffer.beginRenderPass(renderpassinfo, vk::SubpassContents::eInline);
+
+            // The second parameter specifies if the pipeline object is a graphics or compute
+            // pipeline. We've now told Vulkan which operations to execute in the graphics pipeline
+            // and which attachment to use in the fragment shader, so all that remains is telling it
+            // to draw the triangle:
+            command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_graphics_pipeline);
+
+            // The actual vkCmdDraw function is a bit anticlimactic, but it's so simple because of
+            // all the information we specified in advance. It has the following parameters, aside
+            // from the command buffer:
+            // - vertexCount: Even though we don't have a vertex buffer, we technically still have 3
+            //   vertices to draw.
+            // - instanceCount: Used for instanced rendering, use 1 if you're not
+            //   doing that.
+            // - firstVertex: Used as an offset into the vertex buffer, defines the lowest
+            //   value of gl_VertexIndex.
+            // - firstInstance: Used as an offset for instanced rendering,
+            //   defines the lowest value of gl_InstanceIndex.
+            command_buffer.draw(3, 1, 0, 0);
+
+            command_buffer.endRenderPass();
+            command_buffer.end();
+        }
+    }
+}
+
+/*
+Semaphores are a synchronization primitive that can be used to insert a dependency between batches
+submitted to queues. Semaphores have two states - signaled and unsignaled. The state of a semaphore
+can be signaled after execution of a batch of commands is completed. A batch can wait for a
+semaphore to become signaled before it begins execution, and the semaphore is also unsignaled before
+the batch begins execution.
+
+As with most objects in Vulkan, semaphores are an interface to internal data which is typically
+opaque to applications. This internal data is referred to as a semaphore’s payload.
+
+However, in order to enable communication with agents outside of the current device, it is necessary
+to be able to export that payload to a commonly understood format, and subsequently import from that
+format as well.
+
+The internal data of a semaphore may include a reference to any resources and pending work
+associated with signal or unsignal operations performed on that semaphore object. Mechanisms to
+import and export that internal data to and from semaphores are provided below. These mechanisms
+indirectly enable applications to share semaphore state between two or more semaphores and other
+synchronization primitives across process and API boundaries.
+
+https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#synchronization-semaphores
+*/
+void
+renderer::createSemaphores()
+{
+    m_image_available_semaphore = m_device.createSemaphore(vk::SemaphoreCreateInfo());
+    m_render_finished_semaphore = m_device.createSemaphore(vk::SemaphoreCreateInfo());
 }
 
 void
@@ -1082,6 +1279,9 @@ renderer::initVulkan()
     createRenderPass();
     createGraphicsPipeline();
     createFramebuffers();
+    createCommandPool();
+    createCommandBuffers();
+    createSemaphores();
 }
 
 void
@@ -1089,12 +1289,18 @@ renderer::mainLoop()
 {
     while (!glfwWindowShouldClose(m_window)) {
         glfwPollEvents();
+        drawFrame();
     }
 }
 
 void
 renderer::cleanup()
 {
+    m_device.destroySemaphore(m_render_finished_semaphore);
+    m_device.destroySemaphore(m_image_available_semaphore);
+
+    m_device.destroyCommandPool(m_command_pool);
+
     for (auto& framebuffer : m_swapchain_framebuffers) {
         m_device.destroyFramebuffer(framebuffer);
     }
