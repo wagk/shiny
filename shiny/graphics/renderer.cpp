@@ -482,7 +482,60 @@ presentation, which makes semaphores the best fit.
 */
 void
 renderer::drawFrame()
-{}
+{
+    // Acquire image from swapchain.
+    uint32_t imageindex = m_device
+                            .acquireNextImageKHR(m_swapchain, std::numeric_limits<uint64_t>::max(),
+                                                 m_image_available_semaphore, nullptr)
+                            .value;
+
+    // Queue submission and synchronization is configured through parameters in the VkSubmitInfo
+    // structure.
+
+    std::vector<vk::Semaphore>          done_semaphores = { m_render_finished_semaphore };
+    std::vector<vk::Semaphore>          wait_semaphores = { m_image_available_semaphore };
+    std::vector<vk::PipelineStageFlags> wait_stages     = {
+        vk::PipelineStageFlagBits::eColorAttachmentOutput
+    };
+
+    assert(wait_semaphores.size() == wait_stages.size()
+           && "wait_semaphores and wait_stages must have same size!");
+
+    auto submitinfo = vk::SubmitInfo()
+                        .setWaitSemaphoreCount(wait_semaphores.size())
+                        // every semaphore here must match a vk::PipelineStageFlags, index for
+                        // index. The masks dictate which stage of the pipeline is mapped to which
+                        // semaphore the application must wait on
+                        .setPWaitSemaphores(wait_semaphores.data())
+                        // Therefore wait_stages must be exactly the same length as wait_semaphores
+                        .setPWaitDstStageMask(wait_stages.data())
+                        // The next two parameters specify which command buffers to actually submit
+                        // for execution. As mentioned earlier, we should submit the command buffer
+                        // that binds the swap chain image we just acquired as color attachment.
+                        .setCommandBufferCount(1)
+                        .setPCommandBuffers(&m_command_buffers[imageindex])
+                        // The signalSemaphoreCount and pSignalSemaphores parameters specify which
+                        // semaphores to signal once the command buffer(s) have finished execution.
+                        // In our case we're using the renderFinishedSemaphore for that purpose.
+                        .setSignalSemaphoreCount(1)
+                        .setPSignalSemaphores(done_semaphores.data());
+
+    m_graphics_queue.submit(submitinfo, nullptr);
+
+    // TODO: make this a smartptr or something
+    std::vector<vk::SwapchainKHR> swapchains = { m_swapchain };
+
+    auto presentinfo = vk::PresentInfoKHR()
+                         // The first two parameters specify which semaphores to wait on before
+                         // presentation can happen, just like VkSubmitInfo.
+                         .setWaitSemaphoreCount(1)
+                         .setPWaitSemaphores(done_semaphores.data())
+                         .setSwapchainCount(swapchains.size())
+                         .setPSwapchains(swapchains.data())
+                         .setPImageIndices(&imageindex);
+
+    m_presentation_queue.presentKHR(presentinfo);
+}
 
 void
 renderer::initWindow()
@@ -820,11 +873,52 @@ renderer::createRenderPass()
                      // which the data must be preserved
                      .setPColorAttachments(&colorattachmentref);
 
+    // Remember that the subpasses in a render pass automatically take care of image layout
+    // transitions. These transitions are controlled by subpass dependencies, which specify memory
+    // and execution dependencies between subpasses. We have only a single subpass right now, but
+    // the operations right before and right after this subpass also count as implicit "subpasses".
+
+    // There are two built-in dependencies that take care of the transition at the start of the
+    // render pass and at the end of the render pass, but the former does not occur at the right
+    // time. It assumes that the transition occurs at the start of the pipeline, but we haven't
+    // acquired the image yet at that point! There are two ways to deal with this problem. We could
+    // change the waitStages for the imageAvailableSemaphore to VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT to
+    // ensure that the render passes don't begin until the image is available, or we can make the
+    // render pass wait for the VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT stage. I've decided to
+    // go with the second option here, because it's a good excuse to have a look at subpass
+    // dependencies and how they work.
+
+    auto subpassdependency =
+      vk::SubpassDependency()
+        // The special value VK_SUBPASS_EXTERNAL refers to the implicit subpass before or after the
+        // render pass depending on whether it is specified in srcSubpass or dstSubpass
+        // https://stackoverflow.com/questions/45724495/no-definition-for-vk-subpass-external-in-vulkan-hpp
+        .setSrcSubpass(VK_SUBPASS_EXTERNAL)
+        // The index 0 refers to our subpass, which is the first and only one. The dstSubpass must
+        // always be higher than srcSubpass to prevent cycles in the dependency graph. (Not sure
+        // about this because it looks like VK_SUBPASS_EXTERNAL is uint and greater
+        .setDstSubpass(0)
+        // The next two fields specify the operations to wait on and the stages in which these
+        // operations occur. We need to wait for the swap chain to finish reading from the image
+        // before we can access it. This can be accomplished by waiting on the color attachment
+        // output stage itself.
+        .setSrcStageMask(vk::PipelineStageFlags(vk::PipelineStageFlagBits::eColorAttachmentOutput))
+        .setSrcAccessMask(vk::AccessFlags())
+        // The operations that should wait on this are in the color attachment stage and involve the
+        // reading and writing of the color attachment. These settings will prevent the transition
+        // from happening until it's actually necessary (and allowed): when we want to start writing
+        // colors to it.
+        .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput)
+        .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentRead
+                          | vk::AccessFlagBits::eColorAttachmentWrite);
+
     auto renderpasscreateinfo = vk::RenderPassCreateInfo()
                                   .setAttachmentCount(1)
                                   .setPAttachments(&colorattachment)
                                   .setSubpassCount(1)
-                                  .setPSubpasses(&subpass);
+                                  .setPSubpasses(&subpass)
+                                  .setDependencyCount(1)
+                                  .setPDependencies(&subpassdependency);
 
     m_render_pass = m_device.createRenderPass(renderpasscreateinfo);
 }
@@ -1291,6 +1385,8 @@ renderer::mainLoop()
         glfwPollEvents();
         drawFrame();
     }
+
+    m_device.waitIdle();
 }
 
 void
