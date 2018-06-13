@@ -79,6 +79,10 @@ const std::vector<VulkanLayerName> validationLayers = { "VK_LAYER_LUNARG_standar
 
 const std::vector<VulkanExtensionName> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
+const std::vector<shiny::graphics::vertex> vertices = { { { 0.0f, -0.5f }, { 1.0f, 0.0f, 0.0f } },
+                                                        { { 0.5f, 0.5f }, { 0.0f, 1.0f, 0.0f } },
+                                                        { { -0.5f, 0.5f }, { 0.0f, 0.0f, 1.0f } } };
+
 #ifdef NDEBUG
 constexpr const bool enableValidationLayers = false;
 #else
@@ -413,7 +417,7 @@ an std::vector where the default allocator already ensures that the data satisfi
 alignment requirements.
 */
 vk::ShaderModule
-createShaderModule(const shiny::graphics::SpirvBytecode& code, const vk::Device& device)
+createShaderModule(const shiny::graphics::spirvbytecode& code, const vk::Device& device)
 {
     vk::ShaderModuleCreateInfo create_info;
     create_info.setCodeSize(code.size());
@@ -427,7 +431,7 @@ Now that we have a way of producing SPIR-V shaders, it's time to load them into 
 plug them into the graphics pipeline at some point. We'll first write a simple helper function to
 load the binary data from the files.
 */
-shiny::graphics::SpirvBytecode
+shiny::graphics::spirvbytecode
 readFile(const std::string& filename)
 {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
@@ -442,7 +446,7 @@ readFile(const std::string& filename)
     file.seekg(0);
     file.read(buffer.data(), filesize);
 
-    return shiny::graphics::SpirvBytecode(buffer);
+    return shiny::graphics::spirvbytecode(buffer);
 }
 
 }  // namespace

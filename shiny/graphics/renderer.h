@@ -5,9 +5,17 @@
 
 #include <vulkan/vulkan.hpp>
 
+#include <glm/glm.hpp>
+
 namespace shiny::graphics {
 
-using SpirvBytecode = std::vector<char>;
+using spirvbytecode = std::vector<char>;
+
+struct vertex
+{
+    glm::vec2 pos;
+    glm::vec3 color;
+};
 
 class renderer
 {
