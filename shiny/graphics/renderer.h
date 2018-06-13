@@ -38,6 +38,10 @@ private:
     void createCommandPool();
     void createCommandBuffers();
     void createSemaphores();
+    void createFences();
+
+    void recreateSwapChain();
+    void cleanupSwapChain();
 
     GLFWwindow* m_window = nullptr;
 
@@ -69,8 +73,12 @@ private:
     vk::CommandPool                m_command_pool;
     std::vector<vk::CommandBuffer> m_command_buffers;
 
-    vk::Semaphore m_image_available_semaphore;
-    vk::Semaphore m_render_finished_semaphore;
+    std::vector<vk::Semaphore> m_image_available_semaphores;
+    std::vector<vk::Semaphore> m_render_finished_semaphores;
+
+    static const uint32_t  max_frames_in_flight = 2;
+    uint32_t               m_current_frame      = 0;
+    std::vector<vk::Fence> m_in_flight_fences;
 
     vk::Queue m_graphics_queue;
     vk::Queue m_presentation_queue;

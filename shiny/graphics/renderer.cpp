@@ -483,18 +483,30 @@ presentation, which makes semaphores the best fit.
 void
 renderer::drawFrame()
 {
+    // Wait for the old fences. When the frames in flight goes above 2, this might not work anymore
+    m_device.waitForFences(m_in_flight_fences[m_current_frame], true,
+                           std::numeric_limits<uint64_t>::max());
+    m_device.resetFences(m_in_flight_fences[m_current_frame]);
+
     // Acquire image from swapchain.
-    uint32_t imageindex = m_device
-                            .acquireNextImageKHR(m_swapchain, std::numeric_limits<uint64_t>::max(),
-                                                 m_image_available_semaphore, nullptr)
-                            .value;
+    auto next_image_results =
+      m_device.acquireNextImageKHR(m_swapchain, std::numeric_limits<uint64_t>::max(),
+                                   m_image_available_semaphores[m_current_frame], nullptr);
+    auto result = next_image_results.result;
+
+    if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR) {
+        recreateSwapChain();
+        return;
+    }
+
+    auto imageindex = next_image_results.value;
 
     // Queue submission and synchronization is configured through parameters in the VkSubmitInfo
     // structure.
 
-    std::vector<vk::Semaphore>          done_semaphores = { m_render_finished_semaphore };
-    std::vector<vk::Semaphore>          wait_semaphores = { m_image_available_semaphore };
-    std::vector<vk::PipelineStageFlags> wait_stages     = {
+    std::vector<vk::Semaphore> done_semaphores = { m_render_finished_semaphores[m_current_frame] };
+    std::vector<vk::Semaphore> wait_semaphores = { m_image_available_semaphores[m_current_frame] };
+    std::vector<vk::PipelineStageFlags> wait_stages = {
         vk::PipelineStageFlagBits::eColorAttachmentOutput
     };
 
@@ -502,7 +514,7 @@ renderer::drawFrame()
            && "wait_semaphores and wait_stages must have same size!");
 
     auto submitinfo = vk::SubmitInfo()
-                        .setWaitSemaphoreCount(wait_semaphores.size())
+                        .setWaitSemaphoreCount((uint32_t)wait_semaphores.size())
                         // every semaphore here must match a vk::PipelineStageFlags, index for
                         // index. The masks dictate which stage of the pipeline is mapped to which
                         // semaphore the application must wait on
@@ -520,7 +532,7 @@ renderer::drawFrame()
                         .setSignalSemaphoreCount(1)
                         .setPSignalSemaphores(done_semaphores.data());
 
-    m_graphics_queue.submit(submitinfo, nullptr);
+    m_graphics_queue.submit(submitinfo, m_in_flight_fences[m_current_frame]);
 
     // TODO: make this a smartptr or something
     std::vector<vk::SwapchainKHR> swapchains = { m_swapchain };
@@ -530,11 +542,17 @@ renderer::drawFrame()
                          // presentation can happen, just like VkSubmitInfo.
                          .setWaitSemaphoreCount(1)
                          .setPWaitSemaphores(done_semaphores.data())
-                         .setSwapchainCount(swapchains.size())
+                         .setSwapchainCount((uint32_t)swapchains.size())
                          .setPSwapchains(swapchains.data())
                          .setPImageIndices(&imageindex);
 
-    m_presentation_queue.presentKHR(presentinfo);
+    if (auto result = m_presentation_queue.presentKHR(presentinfo);
+        result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR) {
+        recreateSwapChain();
+        return;
+    }
+
+    m_current_frame = (m_current_frame + 1) % max_frames_in_flight;
 }
 
 void
@@ -1351,13 +1369,79 @@ import and export that internal data to and from semaphores are provided below. 
 indirectly enable applications to share semaphore state between two or more semaphores and other
 synchronization primitives across process and API boundaries.
 
+Semaphores are fundamentally a GPU-GPU synchronisation object
+
 https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#synchronization-semaphores
 */
 void
 renderer::createSemaphores()
 {
-    m_image_available_semaphore = m_device.createSemaphore(vk::SemaphoreCreateInfo());
-    m_render_finished_semaphore = m_device.createSemaphore(vk::SemaphoreCreateInfo());
+    for (uint32_t i = 0; i < max_frames_in_flight; ++i) {
+        m_image_available_semaphores.push_back(m_device.createSemaphore(vk::SemaphoreCreateInfo()));
+        m_render_finished_semaphores.push_back(m_device.createSemaphore(vk::SemaphoreCreateInfo()));
+    }
+}
+
+/*
+To perform CPU-GPU synchronization, Vulkan offers a second type of synchronization primitive called
+fences. Fences are similar to semaphores in the sense that they can be signaled and waited for, but
+this time we actually wait for them in our own code.
+
+https://www.khronos.org/registry/vulkan/specs/1.0-wsi_extensions/html/vkspec.html#synchronization-fences
+*/
+void
+renderer::createFences()
+{
+    for (uint32_t i = 0; i < max_frames_in_flight; ++i) {
+        // we create this fence already signalled, which it isn't by default
+        auto fenceinfo = vk::FenceCreateInfo().setFlags(vk::FenceCreateFlagBits::eSignaled);
+        m_in_flight_fences.push_back(m_device.createFence(fenceinfo));
+    }
+}
+
+/*
+The application we have now successfully draws a triangle, but there are some circumstances that it
+isn't handling properly yet. It is possible for the window surface to change such that the swap
+chain is no longer compatible with it. One of the reasons that could cause this to happen is the
+size of the window changing. We have to catch these events and recreate the swap chain.
+*/
+void
+renderer::recreateSwapChain()
+{
+    m_device.waitIdle();
+
+    cleanupSwapChain();
+
+    createSwapChain();
+    createImageViews();
+    createRenderPass();
+    createGraphicsPipeline();
+    createFramebuffers();
+    createCommandBuffers();
+}
+
+/*
+refer to renderer::recreateSwapChain()
+*/
+void
+renderer::cleanupSwapChain()
+{
+    for (auto& framebuffer : m_swapchain_framebuffers) {
+        m_device.destroyFramebuffer(framebuffer);
+    }
+
+    for (auto& imageview : m_swapchain_image_views) {
+        m_device.destroyImageView(imageview);
+    }
+
+    m_device.freeCommandBuffers(m_command_pool, (uint32_t)m_command_buffers.size(),
+                                m_command_buffers.data());
+
+    m_device.destroyPipeline(m_graphics_pipeline);
+    m_device.destroyPipelineLayout(m_pipeline_layout);
+    m_device.destroyRenderPass(m_render_pass);
+
+    m_device.destroySwapchainKHR(m_swapchain);
 }
 
 void
@@ -1376,6 +1460,7 @@ renderer::initVulkan()
     createCommandPool();
     createCommandBuffers();
     createSemaphores();
+    createFences();
 }
 
 void
@@ -1392,23 +1477,22 @@ renderer::mainLoop()
 void
 renderer::cleanup()
 {
-    m_device.destroySemaphore(m_render_finished_semaphore);
-    m_device.destroySemaphore(m_image_available_semaphore);
+    for (auto& fence : m_in_flight_fences) {
+        m_device.destroyFence(fence);
+    }
 
+    for (auto& semaphore : m_image_available_semaphores) {
+        m_device.destroySemaphore(semaphore);
+    }
+
+    for (auto& semaphore : m_render_finished_semaphores) {
+        m_device.destroySemaphore(semaphore);
+    }
+
+    cleanupSwapChain();
+
+    // command buffers are implicitly deleted when their command pool is deleted
     m_device.destroyCommandPool(m_command_pool);
-
-    for (auto& framebuffer : m_swapchain_framebuffers) {
-        m_device.destroyFramebuffer(framebuffer);
-    }
-    for (auto& imageview : m_swapchain_image_views) {
-        m_device.destroyImageView(imageview);
-    }
-
-    m_device.destroyPipeline(m_graphics_pipeline);
-    m_device.destroyPipelineLayout(m_pipeline_layout);
-    m_device.destroyRenderPass(m_render_pass);
-
-    m_device.destroySwapchainKHR(m_swapchain);
 
     m_device.destroyShaderModule(m_vertex_shader_module);
     m_device.destroyShaderModule(m_fragment_shader_module);
