@@ -112,7 +112,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL
     return VK_FALSE;
 }
 
-VkResult
+vk::Result
 CreateDebugReportCallbackEXT(vk::Instance                                instance,
                              const vk::DebugReportCallbackCreateInfoEXT& pCreateInfo,
                              vk::DebugReportCallbackEXT&                 pCallback,
@@ -120,6 +120,7 @@ CreateDebugReportCallbackEXT(vk::Instance                                instanc
 {
     auto func = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
       instance, "vkCreateDebugReportCallbackEXT");
+
     if (func != nullptr) {
         VkDebugReportCallbackCreateInfoEXT createinfo = pCreateInfo;
         const VkAllocationCallbacks*       allocator  = (VkAllocationCallbacks*)pAllocator;
@@ -127,9 +128,9 @@ CreateDebugReportCallbackEXT(vk::Instance                                instanc
         VkResult result = func(instance, &createinfo, allocator, &callback);
 
         pCallback = callback;
-        return result;
+        return static_cast<vk::Result>(result);
     } else {
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
+        return vk::Result::eErrorExtensionNotPresent;
     }
 }
 
@@ -635,7 +636,7 @@ renderer::setupDebugCallback()
                         .setPfnCallback(debugCallback)
                         .setFlags(DebugFlags::eError | DebugFlags::eWarning);
 
-    if (CreateDebugReportCallbackEXT(m_instance, createinfo, m_callback) != VK_SUCCESS) {
+    if (CreateDebugReportCallbackEXT(m_instance, createinfo, m_callback) != vk::Result::eSuccess) {
         throw std::runtime_error("Failed to set up debug callback!");
     }
 }
