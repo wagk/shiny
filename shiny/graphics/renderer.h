@@ -15,6 +15,9 @@ struct vertex
 {
     glm::vec2 pos;
     glm::vec3 color;
+
+    static vk::VertexInputBindingDescription                  getBindingDescription();
+    static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescription();
 };
 
 class renderer
@@ -48,6 +51,8 @@ private:
     void createSemaphores();
     void createFences();
 
+    void createVertexBuffer();
+
     void recreateSwapChain();
     void cleanupSwapChain();
 
@@ -70,6 +75,9 @@ private:
     vk::Format                   m_swapchain_image_format;
     vk::Extent2D                 m_swapchain_extent;
     std::vector<vk::Framebuffer> m_swapchain_framebuffers;
+
+    vk::Buffer       m_vertex_buffer;
+    vk::DeviceMemory m_vertex_buffer_memory;
 
     vk::ShaderModule m_vertex_shader_module;
     vk::ShaderModule m_fragment_shader_module;

@@ -79,9 +79,11 @@ const std::vector<VulkanLayerName> validationLayers = { "VK_LAYER_LUNARG_standar
 
 const std::vector<VulkanExtensionName> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
-const std::vector<shiny::graphics::vertex> vertices = { { { 0.0f, -0.5f }, { 1.0f, 0.0f, 0.0f } },
-                                                        { { 0.5f, 0.5f }, { 0.0f, 1.0f, 0.0f } },
-                                                        { { -0.5f, 0.5f }, { 0.0f, 0.0f, 1.0f } } };
+const std::vector<shiny::graphics::vertex> triangle_vertices = {
+    { { 1.0f, -0.5f }, { 1.0f, 0.0f, 0.0f } },
+    { { 0.5f, 0.5f }, { 0.0f, 1.0f, 0.0f } },
+    { { -0.5f, 0.5f }, { 0.0f, 0.0f, 1.0f } }
+};
 
 #ifdef NDEBUG
 constexpr const bool enableValidationLayers = false;
@@ -406,7 +408,6 @@ getRequiredExtensions()
     return extensions;
 }
 
-
 /*
 Creating a shader module is simple, we only need to specify a pointer to the buffer with the
 bytecode and the length of it. This information is specified in a VkShaderModuleCreateInfo
@@ -450,7 +451,116 @@ readFile(const std::string& filename)
     return shiny::graphics::spirvbytecode(buffer);
 }
 
+using MemoryTypeIndex = uint32_t;
+
+/*
+Graphics cards can offer different types of memory to allocate from. Each type of memory varies in
+terms of allowed operations and performance characteristics. We need to combine the requirements of
+the buffer and our own application requirements to find the right type of memory to use.
+*/
+MemoryTypeIndex
+findMemoryType(const vk::PhysicalDevice& physical_device,
+               // The typeFilter parameter will be used to specify the bit field of memory types
+               // that are suitable.
+               uint32_t                typefilter,
+               vk::MemoryPropertyFlags properties)
+{
+    vk::PhysicalDeviceMemoryProperties memproperties = physical_device.getMemoryProperties();
+
+    // The VkPhysicalDeviceMemoryProperties structure has two arrays memoryTypes and memoryHeaps.
+    // Memory heaps are distinct memory resources like dedicated VRAM and swap space in RAM for when
+    // VRAM runs out. The different types of memory exist within these heaps. Right now we'll only
+    // concern ourselves with the type of memory and not the heap it comes from, but you can imagine
+    // that this can affect performance.
+
+    // However, we're not just interested in a memory type that is suitable for the vertex buffer.
+    // We also need to be able to write our vertex data to that memory. The memoryTypes array
+    // consists of VkMemoryType structs that specify the heap and properties of each type of memory.
+    // The properties define special features of the memory, like being able to map it so we can
+    // write to it from the CPU. This property is indicated with
+    // VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, but we also need to use the
+    // VK_MEMORY_PROPERTY_HOST_COHERENT_BIT property. We'll see why when we map the memory.
+
+    for (uint32_t i = 0; i < memproperties.memoryTypeCount; ++i) {
+        if ((typefilter & (1 << i)) && (memproperties.memoryTypes[i].propertyFlags & properties)) {
+            return i;
+        }
+    }
+
+    throw std::runtime_error("Unable to find a suitable Memory Type!");
+}
+
 }  // namespace
+
+namespace shiny::graphics {
+
+/*
+A vertex binding describes at which rate to load data from memory throughout the vertices. It
+specifies the number of bytes between data entries and whether to move to the next data entry after
+each vertex or after each instance.
+*/
+vk::VertexInputBindingDescription
+vertex::getBindingDescription()
+{
+    return vk::VertexInputBindingDescription()
+      //  The binding parameter specifies the index of the binding in the array of bindings.
+      .setBinding(0)
+      // The stride parameter specifies the number of bytes from one entry to the next
+      .setStride(sizeof(vertex))
+      // the inputRate parameter can have one of the following values:
+      // - VK_VERTEX_INPUT_RATE_VERTEX: Move to the next data entry after each vertex
+      // - VK_VERTEX_INPUT_RATE_INSTANCE: Move to the next data entry after each instance
+      // We're not going to use instanced rendering, so we'll stick to per-vertex data.
+      .setInputRate(vk::VertexInputRate::eVertex);
+}
+
+/*
+As the function prototype indicates, there are going to be two of these structures. An attribute
+description struct describes how to extract a vertex attribute from a chunk of vertex data
+originating from a binding description. We have two attributes, position and color, so we need two
+attribute description structs.
+*/
+std::array<vk::VertexInputAttributeDescription, 2>
+vertex::getAttributeDescription()
+{
+    return {
+        vk::VertexInputAttributeDescription()
+          // The binding parameter tells Vulkan from which binding the per-vertex data comes
+          .setBinding(0)
+          // The location parameter references the location directive of the input in the
+          // vertex shader. The input in the vertex shader with location 0 is the position,
+          // which has two 32-bit float components.
+          .setLocation(0)
+          // The format parameter describes the type of data for the attribute. A bit
+          // confusingly, the formats are specified using the same enumeration as color
+          // formats. The following shader types and formats are commonly used together:
+          //  - float: VK_FORMAT_R32_SFLOAT
+          //  - vec2: VK_FORMAT_R32G32_SFLOAT
+          //  - vec3: VK_FORMAT_R32G32B32_SFLOAT
+          //  - vec4: VK_FORMAT_R32G32B32A32_SFLOAT
+          // As you can see, you should use the format where the amount of color channels matches
+          // the number of components in the shader data type. It is allowed to use more channels
+          // than the number of components in the shader, but they will be silently discarded. If
+          // the number of channels is lower than the number of components, then the BGA components
+          // will use default values of (0, 0, 1). The color type (SFLOAT, UINT, SINT) and bit width
+          // should also match the type of the shader input. See the following examples:
+          //  - ivec2: VK_FORMAT_R32G32_SINT, a 2-component vector of 32-bit signed integers
+          //  - uvec4: VK_FORMAT_R32G32B32A32_UINT, a 4-component vector of 32-bit unsigned
+          //  - integers double: VK_FORMAT_R64_SFLOAT, a double-precision (64-bit) float
+          // The format parameter implicitly defines the byte size of attribute data
+          .setFormat(vk::Format::eR32G32Sfloat)
+          // The offset parameter specifies the number of bytes since the start of the per-vertex
+          // data to read from.
+          .setOffset(offsetof(vertex, pos)),
+        vk::VertexInputAttributeDescription()
+          .setBinding(0)
+          .setLocation(1)
+          .setFormat(vk::Format::eR32G32B32Sfloat)
+          .setOffset(offsetof(vertex, color))
+    };
+}
+
+}  // namespace shiny::graphics
 
 namespace shiny::graphics {
 
@@ -1004,7 +1114,15 @@ renderer::createGraphicsPipeline()
     //    instancing)
     //  - Attribute descriptions: type of the attributes passed to the vertex shader,
     //    which binding to load them from and at which offset
-    auto vertexinputinfo = vk::PipelineVertexInputStateCreateInfo();
+    auto bindingdescription    = vertex::getBindingDescription();
+    auto attributedescriptions = vertex::getAttributeDescription();
+
+    auto vertexinputinfo =
+      vk::PipelineVertexInputStateCreateInfo()
+        .setVertexBindingDescriptionCount(1)
+        .setPVertexBindingDescriptions(&bindingdescription)
+        .setVertexAttributeDescriptionCount((uint32_t)attributedescriptions.size())
+        .setPVertexAttributeDescriptions(attributedescriptions.data());
 
     // The VkPipelineInputAssemblyStateCreateInfo struct describes two things: what kind of geometry
     // will be drawn from the vertices and if primitive restart should be enabled.
@@ -1335,10 +1453,16 @@ renderer::createCommandBuffers()
             // to draw the triangle:
             command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_graphics_pipeline);
 
+            std::vector<vk::Buffer>     vertexbuffers = { m_vertex_buffer };
+            std::vector<vk::DeviceSize> offsets       = { 0 };
+
+            command_buffer.bindVertexBuffers(0, vertexbuffers, offsets);
+
             // The actual vkCmdDraw function is a bit anticlimactic, but it's so simple because of
             // all the information we specified in advance. It has the following parameters, aside
             // from the command buffer:
-            // - vertexCount: Even though we don't have a vertex buffer, we technically still have 3
+            // - vertexCount: Even though we don't have a vertex buffer, we technically still have
+            // 3
             //   vertices to draw.
             // - instanceCount: Used for instanced rendering, use 1 if you're not
             //   doing that.
@@ -1346,7 +1470,7 @@ renderer::createCommandBuffers()
             //   value of gl_VertexIndex.
             // - firstInstance: Used as an offset for instanced rendering,
             //   defines the lowest value of gl_InstanceIndex.
-            command_buffer.draw(3, 1, 0, 0);
+            command_buffer.draw((uint32_t)triangle_vertices.size(), 1, 0, 0);
 
             command_buffer.endRenderPass();
             command_buffer.end();
@@ -1398,10 +1522,87 @@ void
 renderer::createFences()
 {
     for (uint32_t i = 0; i < max_frames_in_flight; ++i) {
-        // we create this fence already signalled, which it isn't by default
-        auto fenceinfo = vk::FenceCreateInfo().setFlags(vk::FenceCreateFlagBits::eSignaled);
+        auto fenceinfo = vk::FenceCreateInfo()
+                           // we create this fence already signalled, which it isn't by default
+                           .setFlags(vk::FenceCreateFlagBits::eSignaled);
         m_in_flight_fences.push_back(m_device.createFence(fenceinfo));
     }
+}
+
+/*
+Buffers in Vulkan are regions of memory used for storing arbitrary data that can be read by the
+graphics card. They can be used to store vertex data, which we'll do in this chapter, but they can
+also be used for many other purposes that we'll explore in future chapters. Unlike the Vulkan
+objects we've been dealing with so far, buffers do not automatically allocate memory for themselves.
+The work from the previous chapters has shown that the Vulkan API puts the programmer in control of
+almost everything and memory management is one of those things.
+
+https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#vkCreateBuffer
+*/
+void
+renderer::createVertexBuffer()
+{
+    auto bufferinfo =
+      vk::BufferCreateInfo()
+        // The first field of the struct is size, which specifies the size of the buffer in bytes.
+        .setSize(sizeof(decltype(triangle_vertices)::value_type) * triangle_vertices.size())
+        // The second field is usage, which indicates for which purposes the data in the buffer is
+        // going to be used. It is possible to specify multiple purposes using a bitwise or. Our use
+        // case will be a vertex buffer
+        .setUsage(vk::BufferUsageFlagBits::eVertexBuffer)
+        // Just like the images in the swap chain, buffers can also be owned by a specific queue
+        // family or be shared between multiple at the same time. The buffer will only be used from
+        // the graphics queue, so we can stick to exclusive access.
+        .setSharingMode(vk::SharingMode::eExclusive);
+
+    m_vertex_buffer = m_device.createBuffer(bufferinfo);
+
+    // The buffer has been created, but it doesn't actually have any memory assigned to it yet. The
+    // first step of allocating memory for the buffer is to query its memory requirements using the
+    // aptly named vkGetBufferMemoryRequirements function.
+    vk::MemoryRequirements memrequirements = m_device.getBufferMemoryRequirements(m_vertex_buffer);
+
+    // The VkMemoryRequirements struct has three fields:
+    //  - size: The size of the required amount of memory in bytes, may differ from bufferInfo.size.
+    //  - alignment: The offset in bytes where the buffer begins in the allocated region of memory,
+    // depends on bufferInfo.usage and bufferInfo.flags.
+    //  - memoryTypeBits: Bit field of the memory types that are suitable for the buffer.
+
+    auto memallocinfo =
+      vk::MemoryAllocateInfo()
+        .setAllocationSize(memrequirements.size)
+        .setMemoryTypeIndex(findMemoryType(m_physical_device, memrequirements.memoryTypeBits,
+                                           vk::MemoryPropertyFlagBits::eHostVisible
+                                             | vk::MemoryPropertyFlagBits::eHostCoherent));
+
+    m_vertex_buffer_memory = m_device.allocateMemory(memallocinfo);
+
+    // The first three parameters are self-explanatory and the fourth parameter is the offset within
+    // the region of memory. Since this memory is allocated specifically for this the vertex buffer,
+    // the offset is simply 0. If the offset is non-zero, then it is required to be divisible by
+    // memRequirements.alignment.
+    m_device.bindBufferMemory(m_vertex_buffer, m_vertex_buffer_memory, 0);
+
+    // Now we copy the triangle vertex data into the buffer
+    // You can now simply memcpy the vertex data to the mapped memory and unmap it again using
+    // vkUnmapMemory. Unfortunately the driver may not immediately copy the data into the buffer
+    // memory, for example because of caching. It is also possible that writes to the buffer are not
+    // visible in the mapped memory yet. There are two ways to deal with that problem:
+    //  - Use a memory heap that is host coherent, indicated with
+    //  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    //  - Call vkFlushMappedMemoryRanges to after writing to the mapped memory, and call
+    //  vkInvalidateMappedMemoryRanges before reading from the mapped memory
+    // We went for the first approach, which ensures that the mapped memory always matches the
+    // contents of the allocated memory. Do keep in mind that this may lead to slightly worse
+    // performance than explicit flushing, but we'll see why that doesn't matter in the next
+    // chapter.
+    {
+        void* data = m_device.mapMemory(m_vertex_buffer_memory, 0, bufferinfo.size);
+        std::memcpy(data, triangle_vertices.data(), (size_t)bufferinfo.size);
+        m_device.unmapMemory(m_vertex_buffer_memory);
+    }
+
+    // All that remains now is binding the vertex buffer during rendering operations.
 }
 
 /*
@@ -1463,6 +1664,7 @@ renderer::initVulkan()
     createGraphicsPipeline();
     createFramebuffers();
     createCommandPool();
+    createVertexBuffer();
     createCommandBuffers();
     createSemaphores();
     createFences();
@@ -1498,6 +1700,9 @@ renderer::cleanup()
 
     // command buffers are implicitly deleted when their command pool is deleted
     m_device.destroyCommandPool(m_command_pool);
+
+    m_device.destroyBuffer(m_vertex_buffer);
+    m_device.freeMemory(m_vertex_buffer_memory);
 
     m_device.destroyShaderModule(m_vertex_shader_module);
     m_device.destroyShaderModule(m_fragment_shader_module);
