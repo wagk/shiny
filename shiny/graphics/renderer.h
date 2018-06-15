@@ -108,4 +108,25 @@ private:
     vk::Queue m_presentation_queue;
 };
 
+template<typename Func>
+void
+recordCommandBuffer(vk::CommandBuffer buffer, const vk::CommandBufferBeginInfo& info, Func action)
+{
+    buffer.begin(info);
+    action();
+    buffer.end();
+}
+
+template<typename Func>
+void
+recordCommandBufferRenderPass(vk::CommandBuffer              buffer,
+                              const vk::RenderPassBeginInfo& renderPassBegin,
+                              vk::SubpassContents            contents,
+                              Func                           action)
+{
+    buffer.beginRenderPass(renderPassBegin, contents);
+    action();
+    buffer.endRenderPass();
+}
+
 }  // namespace shiny::graphics

@@ -1409,9 +1409,7 @@ renderer::createCommandBuffers()
             // for the next frame while the last frame is not finished yet.
             .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse);
 
-        {
-            command_buffer.begin(begininfo);  // wraps vkCmdBeginRenderPass
-
+        recordCommandBuffer(command_buffer, begininfo, [=]() {
             auto const& framebuffer = m_swapchain_framebuffers[i];
             auto        clearcolor  = vk::ClearValue(std::array<float, 4>{ 0.f, 0.f, 0.f, 1.f });
             auto        renderarea  = vk::Rect2D({ 0, 0 }, m_swapchain_extent);
@@ -1445,36 +1443,36 @@ renderer::createCommandBuffers()
             //  - VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS: The render pass commands will be
             //    executed from secondary command buffers.
             // We will not be using secondary command buffers, so we'll go with the first option.
-            command_buffer.beginRenderPass(renderpassinfo, vk::SubpassContents::eInline);
+            recordCommandBufferRenderPass(
+              command_buffer, renderpassinfo, vk::SubpassContents::eInline, [=]() {
+                  // The second parameter specifies if the pipeline object is a graphics or compute
+                  // pipeline. We've now told Vulkan which operations to execute in the graphics
+                  // pipeline and which attachment to use in the fragment shader, so all that
+                  // remains is telling it to draw the triangle:
+                  command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                                              m_graphics_pipeline);
 
-            // The second parameter specifies if the pipeline object is a graphics or compute
-            // pipeline. We've now told Vulkan which operations to execute in the graphics pipeline
-            // and which attachment to use in the fragment shader, so all that remains is telling it
-            // to draw the triangle:
-            command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_graphics_pipeline);
+                  std::vector<vk::Buffer>     vertexbuffers = { m_vertex_buffer };
+                  std::vector<vk::DeviceSize> offsets       = { 0 };
 
-            std::vector<vk::Buffer>     vertexbuffers = { m_vertex_buffer };
-            std::vector<vk::DeviceSize> offsets       = { 0 };
+                  command_buffer.bindVertexBuffers(0, vertexbuffers, offsets);
 
-            command_buffer.bindVertexBuffers(0, vertexbuffers, offsets);
-
-            // The actual vkCmdDraw function is a bit anticlimactic, but it's so simple because of
-            // all the information we specified in advance. It has the following parameters, aside
-            // from the command buffer:
-            // - vertexCount: Even though we don't have a vertex buffer, we technically still have
-            // 3
-            //   vertices to draw.
-            // - instanceCount: Used for instanced rendering, use 1 if you're not
-            //   doing that.
-            // - firstVertex: Used as an offset into the vertex buffer, defines the lowest
-            //   value of gl_VertexIndex.
-            // - firstInstance: Used as an offset for instanced rendering,
-            //   defines the lowest value of gl_InstanceIndex.
-            command_buffer.draw((uint32_t)triangle_vertices.size(), 1, 0, 0);
-
-            command_buffer.endRenderPass();
-            command_buffer.end();
-        }
+                  // The actual vkCmdDraw function is a bit anticlimactic, but it's so simple
+                  // because of all the information we specified in advance. It has the following
+                  // parameters, aside from the command buffer:
+                  // - vertexCount: Even though we don't have a vertex buffer, we technically still
+                  // have
+                  // 3
+                  //   vertices to draw.
+                  // - instanceCount: Used for instanced rendering, use 1 if you're not
+                  //   doing that.
+                  // - firstVertex: Used as an offset into the vertex buffer, defines the lowest
+                  //   value of gl_VertexIndex.
+                  // - firstInstance: Used as an offset for instanced rendering,
+                  //   defines the lowest value of gl_InstanceIndex.
+                  command_buffer.draw((uint32_t)triangle_vertices.size(), 1, 0, 0);
+              });
+        });
     }
 }
 
@@ -1666,15 +1664,11 @@ renderer::copyBuffer(vk::Buffer src, vk::Buffer* dst, vk::DeviceSize size)
     auto begininfo =
       vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
 
-    {
-        commandbuffer.begin(begininfo);
-
+    recordCommandBuffer(commandbuffer, begininfo, [=]() {
         auto copyregion = vk::BufferCopy().setSize(size);
 
         commandbuffer.copyBuffer(src, *dst, 1, &copyregion);
-
-        commandbuffer.end();
-    }
+    });
 
     auto submitinfo = vk::SubmitInfo().setCommandBufferCount(1).setPCommandBuffers(&commandbuffer);
 
