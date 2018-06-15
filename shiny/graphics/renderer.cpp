@@ -80,7 +80,7 @@ const std::vector<VulkanLayerName> validationLayers = { "VK_LAYER_LUNARG_standar
 const std::vector<VulkanExtensionName> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
 const std::vector<shiny::graphics::vertex> triangle_vertices = {
-    { { 1.0f, -0.5f }, { 1.0f, 0.0f, 0.0f } },
+    { { 0.0f, -0.5f }, { 1.0f, 0.0f, 0.0f } },
     { { 0.5f, 0.5f }, { 0.0f, 1.0f, 0.0f } },
     { { -0.5f, 0.5f }, { 0.0f, 0.0f, 1.0f } }
 };
@@ -1542,46 +1542,13 @@ https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#vk
 void
 renderer::createVertexBuffer()
 {
-    auto bufferinfo =
-      vk::BufferCreateInfo()
-        // The first field of the struct is size, which specifies the size of the buffer in bytes.
-        .setSize(sizeof(decltype(triangle_vertices)::value_type) * triangle_vertices.size())
-        // The second field is usage, which indicates for which purposes the data in the buffer is
-        // going to be used. It is possible to specify multiple purposes using a bitwise or. Our use
-        // case will be a vertex buffer
-        .setUsage(vk::BufferUsageFlagBits::eVertexBuffer)
-        // Just like the images in the swap chain, buffers can also be owned by a specific queue
-        // family or be shared between multiple at the same time. The buffer will only be used from
-        // the graphics queue, so we can stick to exclusive access.
-        .setSharingMode(vk::SharingMode::eExclusive);
+    vk::DeviceSize size =
+      sizeof(decltype(triangle_vertices)::value_type) * triangle_vertices.size();
 
-    m_vertex_buffer = m_device.createBuffer(bufferinfo);
-
-    // The buffer has been created, but it doesn't actually have any memory assigned to it yet. The
-    // first step of allocating memory for the buffer is to query its memory requirements using the
-    // aptly named vkGetBufferMemoryRequirements function.
-    vk::MemoryRequirements memrequirements = m_device.getBufferMemoryRequirements(m_vertex_buffer);
-
-    // The VkMemoryRequirements struct has three fields:
-    //  - size: The size of the required amount of memory in bytes, may differ from bufferInfo.size.
-    //  - alignment: The offset in bytes where the buffer begins in the allocated region of memory,
-    // depends on bufferInfo.usage and bufferInfo.flags.
-    //  - memoryTypeBits: Bit field of the memory types that are suitable for the buffer.
-
-    auto memallocinfo =
-      vk::MemoryAllocateInfo()
-        .setAllocationSize(memrequirements.size)
-        .setMemoryTypeIndex(findMemoryType(m_physical_device, memrequirements.memoryTypeBits,
-                                           vk::MemoryPropertyFlagBits::eHostVisible
-                                             | vk::MemoryPropertyFlagBits::eHostCoherent));
-
-    m_vertex_buffer_memory = m_device.allocateMemory(memallocinfo);
-
-    // The first three parameters are self-explanatory and the fourth parameter is the offset within
-    // the region of memory. Since this memory is allocated specifically for this the vertex buffer,
-    // the offset is simply 0. If the offset is non-zero, then it is required to be divisible by
-    // memRequirements.alignment.
-    m_device.bindBufferMemory(m_vertex_buffer, m_vertex_buffer_memory, 0);
+    createBuffer(size, vk::BufferUsageFlagBits::eVertexBuffer,
+                 vk::MemoryPropertyFlagBits::eHostVisible
+                   | vk::MemoryPropertyFlagBits::eHostCoherent,
+                 &m_vertex_buffer, &m_vertex_buffer_memory);
 
     // Now we copy the triangle vertex data into the buffer
     // You can now simply memcpy the vertex data to the mapped memory and unmap it again using
@@ -1597,17 +1564,67 @@ renderer::createVertexBuffer()
     // performance than explicit flushing, but we'll see why that doesn't matter in the next
     // chapter.
     {
-        void* data = m_device.mapMemory(m_vertex_buffer_memory, 0, bufferinfo.size);
-        std::memcpy(data, triangle_vertices.data(), (size_t)bufferinfo.size);
+        void* data = m_device.mapMemory(m_vertex_buffer_memory, 0, size);
+        std::memcpy(data, triangle_vertices.data(), size);
         m_device.unmapMemory(m_vertex_buffer_memory);
     }
 
     // All that remains now is binding the vertex buffer during rendering operations.
 }
 
+void
+renderer::createBuffer(vk::DeviceSize          size,
+                       vk::BufferUsageFlags    usage,
+                       vk::MemoryPropertyFlags properties,
+                       vk::Buffer*             buffer,
+                       vk::DeviceMemory*       buffermemory)
+{
+    if (!buffer || !buffermemory)
+        return;
+
+    auto bufferinfo =
+      vk::BufferCreateInfo()
+        // The first field of the struct is size, which specifies the size of the buffer in bytes.
+        .setSize(size)
+        // The second field is usage, which indicates for which purposes the data in the buffer is
+        // going to be used. It is possible to specify multiple purposes using a bitwise or. Our use
+        // case will be a vertex buffer
+        .setUsage(usage)
+        // Just like the images in the swap chain, buffers can also be owned by a specific queue
+        // family or be shared between multiple at the same time. The buffer will only be used from
+        // the graphics queue, so we can stick to exclusive access.
+        .setSharingMode(vk::SharingMode::eExclusive);
+
+    *buffer = m_device.createBuffer(bufferinfo);
+
+    // The buffer has been created, but it doesn't actually have any memory assigned to it yet. The
+    // first step of allocating memory for the buffer is to query its memory requirements using the
+    // aptly named vkGetBufferMemoryRequirements function.
+    vk::MemoryRequirements memrequirements = m_device.getBufferMemoryRequirements(m_vertex_buffer);
+
+    // The VkMemoryRequirements struct has three fields:
+    //  - size: The size of the required amount of memory in bytes, may differ from bufferInfo.size.
+    //  - alignment: The offset in bytes where the buffer begins in the allocated region of memory,
+    // depends on bufferInfo.usage and bufferInfo.flags.
+    //  - memoryTypeBits: Bit field of the memory types that are suitable for the buffer.
+
+    auto memallocinfo = vk::MemoryAllocateInfo()
+                          .setAllocationSize(memrequirements.size)
+                          .setMemoryTypeIndex(findMemoryType(
+                            m_physical_device, memrequirements.memoryTypeBits, properties));
+
+    *buffermemory = m_device.allocateMemory(memallocinfo);
+
+    // The first three parameters are self-explanatory and the fourth parameter is the offset within
+    // the region of memory. Since this memory is allocated specifically for this the vertex buffer,
+    // the offset is simply 0. If the offset is non-zero, then it is required to be divisible by
+    // memRequirements.alignment.
+    m_device.bindBufferMemory(*buffer, *buffermemory, 0);
+}
+
 /*
-The application we have now successfully draws a triangle, but there are some circumstances that it
-isn't handling properly yet. It is possible for the window surface to change such that the swap
+The application we have now successfully draws a triangle, but there are some circumstances that
+it isn't handling properly yet. It is possible for the window surface to change such that the swap
 chain is no longer compatible with it. One of the reasons that could cause this to happen is the
 size of the window changing. We have to catch these events and recreate the swap chain.
 */
