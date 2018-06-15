@@ -1545,10 +1545,13 @@ renderer::createVertexBuffer()
     vk::DeviceSize size =
       sizeof(decltype(triangle_vertices)::value_type) * triangle_vertices.size();
 
-    createBuffer(size, vk::BufferUsageFlagBits::eVertexBuffer,
+    vk::Buffer       stagingbuffer;
+    vk::DeviceMemory stagingbuffermemory;
+
+    createBuffer(size, vk::BufferUsageFlagBits::eTransferSrc,
                  vk::MemoryPropertyFlagBits::eHostVisible
                    | vk::MemoryPropertyFlagBits::eHostCoherent,
-                 &m_vertex_buffer, &m_vertex_buffer_memory);
+                 &stagingbuffer, &stagingbuffermemory);
 
     // Now we copy the triangle vertex data into the buffer
     // You can now simply memcpy the vertex data to the mapped memory and unmap it again using
@@ -1564,14 +1567,31 @@ renderer::createVertexBuffer()
     // performance than explicit flushing, but we'll see why that doesn't matter in the next
     // chapter.
     {
-        void* data = m_device.mapMemory(m_vertex_buffer_memory, 0, size);
+        void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
         std::memcpy(data, triangle_vertices.data(), size);
-        m_device.unmapMemory(m_vertex_buffer_memory);
+        m_device.unmapMemory(stagingbuffermemory);
     }
+
+    // The vertexBuffer is now allocated from a memory type that is device local, which generally
+    // means that we're not able to use vkMapMemory. However, we can copy data from the
+    // stagingBuffer to the vertexBuffer (using copyBuffer()). We have to indicate that we intend to
+    // do that by specifying the transfer source flag for the stagingBuffer and the transfer
+    // destination flag for the vertexBuffer, along with the vertex buffer usage flag.
+    createBuffer(
+      size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
+      vk::MemoryPropertyFlagBits::eDeviceLocal, &m_vertex_buffer, &m_vertex_buffer_memory);
+
+    copyBuffer(stagingbuffer, &m_vertex_buffer, size);
+
+    m_device.destroyBuffer(stagingbuffer);
+    m_device.freeMemory(stagingbuffermemory);
 
     // All that remains now is binding the vertex buffer during rendering operations.
 }
 
+/*
+This is a helper function to create a buffer, allocate some memory for it, and bind them together
+*/
 void
 renderer::createBuffer(vk::DeviceSize          size,
                        vk::BufferUsageFlags    usage,
@@ -1600,7 +1620,7 @@ renderer::createBuffer(vk::DeviceSize          size,
     // The buffer has been created, but it doesn't actually have any memory assigned to it yet. The
     // first step of allocating memory for the buffer is to query its memory requirements using the
     // aptly named vkGetBufferMemoryRequirements function.
-    vk::MemoryRequirements memrequirements = m_device.getBufferMemoryRequirements(m_vertex_buffer);
+    vk::MemoryRequirements memrequirements = m_device.getBufferMemoryRequirements(*buffer);
 
     // The VkMemoryRequirements struct has three fields:
     //  - size: The size of the required amount of memory in bytes, may differ from bufferInfo.size.
@@ -1620,6 +1640,54 @@ renderer::createBuffer(vk::DeviceSize          size,
     // the offset is simply 0. If the offset is non-zero, then it is required to be divisible by
     // memRequirements.alignment.
     m_device.bindBufferMemory(*buffer, *buffermemory, 0);
+}
+
+/*
+Memory transfer operations are executed using command buffers, just like drawing commands. Therefore
+we must first allocate a temporary command buffer. You may wish to create a separate command pool
+for these kinds of short-lived buffers, because the implementation may be able to apply memory
+allocation optimizations. You should use the VK_COMMAND_POOL_CREATE_TRANSIENT_BIT flag during
+command pool generation in that case.
+*/
+void
+renderer::copyBuffer(vk::Buffer src, vk::Buffer* dst, vk::DeviceSize size)
+{
+    if (!src || !dst)
+        return;
+
+    auto allocinfo = vk::CommandBufferAllocateInfo()
+                       .setLevel(vk::CommandBufferLevel::ePrimary)
+                       .setCommandPool(m_command_pool)
+                       .setCommandBufferCount(1);
+
+    // NOTE: We get the first one because we know the buffercount is one
+    auto commandbuffer = m_device.allocateCommandBuffers(allocinfo).front();
+
+    auto begininfo =
+      vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+    {
+        commandbuffer.begin(begininfo);
+
+        auto copyregion = vk::BufferCopy().setSize(size);
+
+        commandbuffer.copyBuffer(src, *dst, 1, &copyregion);
+
+        commandbuffer.end();
+    }
+
+    auto submitinfo = vk::SubmitInfo().setCommandBufferCount(1).setPCommandBuffers(&commandbuffer);
+
+    m_graphics_queue.submit(submitinfo, nullptr);
+    // Unlike the draw commands, there are no events we need to wait on this time. We just want to
+    // execute the transfer on the buffers immediately. There are again two possible ways to wait on
+    // this transfer to complete. We could use a fence and wait with vkWaitForFences, or simply wait
+    // for the transfer queue to become idle with vkQueueWaitIdle. A fence would allow you to
+    // schedule multiple transfers simultaneously and wait for all of them complete, instead of
+    // executing one at a time. That may give the driver more opportunities to optimize.
+    m_graphics_queue.waitIdle();
+
+    m_device.freeCommandBuffers(m_command_pool, 1, &commandbuffer);
 }
 
 /*

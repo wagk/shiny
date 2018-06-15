@@ -53,12 +53,13 @@ private:
 
     void createVertexBuffer();
 
-    // helper function
+    // helper functions
     void createBuffer(vk::DeviceSize          size,
                       vk::BufferUsageFlags    usage,
                       vk::MemoryPropertyFlags properties,
                       vk::Buffer*             buffer,
                       vk::DeviceMemory*       buffermemory);
+    void copyBuffer(vk::Buffer srcbuffer, vk::Buffer* dstbuffer, vk::DeviceSize size);
 
     void recreateSwapChain();
     void cleanupSwapChain();
