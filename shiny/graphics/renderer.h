@@ -52,14 +52,15 @@ private:
     void createFences();
 
     void createVertexBuffer();
+    void createIndexBuffer();
 
     // helper functions
     void createBuffer(vk::DeviceSize          size,
                       vk::BufferUsageFlags    usage,
                       vk::MemoryPropertyFlags properties,
                       vk::Buffer*             buffer,
-                      vk::DeviceMemory*       buffermemory);
-    void copyBuffer(vk::Buffer srcbuffer, vk::Buffer* dstbuffer, vk::DeviceSize size);
+                      vk::DeviceMemory*       buffermemory) const;
+    void copyBuffer(vk::Buffer srcbuffer, vk::Buffer* dstbuffer, vk::DeviceSize size) const;
 
     void recreateSwapChain();
     void cleanupSwapChain();
@@ -86,6 +87,9 @@ private:
 
     vk::Buffer       m_vertex_buffer;
     vk::DeviceMemory m_vertex_buffer_memory;
+
+    vk::Buffer       m_index_buffer;
+    vk::DeviceMemory m_index_buffer_memory;
 
     vk::ShaderModule m_vertex_shader_module;
     vk::ShaderModule m_fragment_shader_module;

@@ -80,10 +80,13 @@ const std::vector<VulkanLayerName> validationLayers = { "VK_LAYER_LUNARG_standar
 const std::vector<VulkanExtensionName> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
 const std::vector<shiny::graphics::vertex> triangle_vertices = {
-    { { 0.0f, -0.5f }, { 1.0f, 0.0f, 0.0f } },
-    { { 0.5f, 0.5f }, { 0.0f, 1.0f, 0.0f } },
-    { { -0.5f, 0.5f }, { 0.0f, 0.0f, 1.0f } }
+    { { -0.5f, -0.5f }, { 1.0f, 0.0f, 0.0f } },
+    { { 0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f } },
+    { { 0.5f, 0.5f }, { 0.0f, 0.0f, 1.0f } },
+    { { -0.5f, 0.5f }, { 1.0f, 1.0f, 1.0f } }
 };
+
+const std::vector<uint16_t> triangle_indices = { 0, 1, 2, 2, 3, 0 };
 
 #ifdef NDEBUG
 constexpr const bool enableValidationLayers = false;
@@ -1455,7 +1458,8 @@ renderer::createCommandBuffers()
                   std::vector<vk::Buffer>     vertexbuffers = { m_vertex_buffer };
                   std::vector<vk::DeviceSize> offsets       = { 0 };
 
-                  command_buffer.bindVertexBuffers(0, vertexbuffers, offsets);
+                  command_buffer.bindVertexBuffers(0, 1, vertexbuffers.data(), offsets.data());
+                  command_buffer.bindIndexBuffer(m_index_buffer, 0, vk::IndexType::eUint16);
 
                   // The actual vkCmdDraw function is a bit anticlimactic, but it's so simple
                   // because of all the information we specified in advance. It has the following
@@ -1470,7 +1474,17 @@ renderer::createCommandBuffers()
                   //   value of gl_VertexIndex.
                   // - firstInstance: Used as an offset for instanced rendering,
                   //   defines the lowest value of gl_InstanceIndex.
-                  command_buffer.draw((uint32_t)triangle_vertices.size(), 1, 0, 0);
+                  // command_buffer.draw((uint32_t)triangle_vertices.size(), 1, 0, 0);
+
+                  // A call to this function is very similar to vkCmdDraw. The first two parameters
+                  // specify the number of indices and the number of instances. We're not using
+                  // instancing, so just specify 1 instance. The number of indices represents the
+                  // number of vertices that will be passed to the vertex buffer. The next parameter
+                  // specifies an offset into the index buffer, using a value of 1 would cause the
+                  // graphics card to start reading at the second index. The second to last
+                  // parameter specifies an offset to add to the indices in the index buffer. The
+                  // final parameter specifies an offset for instancing, which we're not using.
+                  command_buffer.drawIndexed((uint32_t)triangle_indices.size(), 1, 0, 0, 0);
               });
         });
     }
@@ -1588,6 +1602,40 @@ renderer::createVertexBuffer()
 }
 
 /*
+We do exactly the same thing we did for createVertexBuffer and do it for indices instead
+*/
+void
+renderer::createIndexBuffer()
+{
+    vk::DeviceSize size = sizeof(decltype(triangle_indices)::value_type) * triangle_indices.size();
+
+    vk::Buffer       stagingbuffer;
+    vk::DeviceMemory stagingbuffermemory;
+
+    createBuffer(size, vk::BufferUsageFlagBits::eTransferSrc,
+                 vk::MemoryPropertyFlagBits::eHostVisible
+                   | vk::MemoryPropertyFlagBits::eHostCoherent,
+                 &stagingbuffer, &stagingbuffermemory);
+
+    {
+        void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
+        std::memcpy(data, triangle_indices.data(), size);
+        m_device.unmapMemory(stagingbuffermemory);
+    }
+
+    createBuffer(size,
+                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
+                 vk::MemoryPropertyFlagBits::eDeviceLocal, &m_index_buffer, &m_index_buffer_memory);
+
+    copyBuffer(stagingbuffer, &m_index_buffer, size);
+
+    m_device.destroyBuffer(stagingbuffer);
+    m_device.freeMemory(stagingbuffermemory);
+
+    // All that remains now is binding the index buffer during rendering operations.
+}
+
+/*
 This is a helper function to create a buffer, allocate some memory for it, and bind them together
 */
 void
@@ -1595,7 +1643,7 @@ renderer::createBuffer(vk::DeviceSize          size,
                        vk::BufferUsageFlags    usage,
                        vk::MemoryPropertyFlags properties,
                        vk::Buffer*             buffer,
-                       vk::DeviceMemory*       buffermemory)
+                       vk::DeviceMemory*       buffermemory) const
 {
     if (!buffer || !buffermemory)
         return;
@@ -1648,7 +1696,7 @@ allocation optimizations. You should use the VK_COMMAND_POOL_CREATE_TRANSIENT_BI
 command pool generation in that case.
 */
 void
-renderer::copyBuffer(vk::Buffer src, vk::Buffer* dst, vk::DeviceSize size)
+renderer::copyBuffer(vk::Buffer src, vk::Buffer* dst, vk::DeviceSize size) const
 {
     if (!src || !dst)
         return;
@@ -1660,7 +1708,6 @@ renderer::copyBuffer(vk::Buffer src, vk::Buffer* dst, vk::DeviceSize size)
 
     // NOTE: We get the first one because we know the buffercount is one
     auto commandbuffer = m_device.allocateCommandBuffers(allocinfo).front();
-
     auto begininfo =
       vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
 
@@ -1744,6 +1791,7 @@ renderer::initVulkan()
     createFramebuffers();
     createCommandPool();
     createVertexBuffer();
+    createIndexBuffer();
     createCommandBuffers();
     createSemaphores();
     createFences();
@@ -1782,6 +1830,9 @@ renderer::cleanup()
 
     m_device.destroyBuffer(m_vertex_buffer);
     m_device.freeMemory(m_vertex_buffer_memory);
+
+    m_device.destroyBuffer(m_index_buffer);
+    m_device.freeMemory(m_index_buffer_memory);
 
     m_device.destroyShaderModule(m_vertex_shader_module);
     m_device.destroyShaderModule(m_fragment_shader_module);
