@@ -341,6 +341,7 @@ chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentMod
             bestmode = availablepresentmode;
         }
     }
+
     return bestmode;
 }
 
@@ -1842,6 +1843,7 @@ renderer::cleanup()
     if (enableValidationLayers) {
         DestroyDebugReportCallbackEXT(m_instance, m_callback);
     }
+
     // vk::surfaceKHR objects do not have a destroy()
     // https://github.com/KhronosGroup/Vulkan-Hpp/issues/204
     m_instance.destroySurfaceKHR(m_surface);
