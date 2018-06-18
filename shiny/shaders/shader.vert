@@ -1,6 +1,15 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
+// Note that the order of the uniform, in and out declarations doesn't matter. 
+// The binding directive is similar to the location directive for attributes. 
+
+layout(binding = 0) uniform UniformBufferObject {
+  mat4 model;
+  mat4 view;
+  mat4 proj;
+} ubo;
+
 layout(location = 0) in vec2 inPosition;
 layout(location = 1) in vec3 inColor;
 
@@ -11,6 +20,6 @@ out gl_PerVertex {
 };
 
 void main() {
-    gl_Position = vec4(inPosition, 0.0, 1.0);
+    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 0.0, 1.0);
     fragColor = inColor;
 }

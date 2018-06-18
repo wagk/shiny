@@ -20,6 +20,18 @@ struct vertex
     static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescription();
 };
 
+/*
+We can exactly match the definition in the shader using data types in GLM. The data in the matrices
+is binary compatible with the way the shader expects it, so we can later just memcpy a
+UniformBufferObject to a VkBuffer.
+*/
+struct uniformbufferobject
+{
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 proj;
+};
+
 class renderer
 {
 public:
@@ -53,6 +65,13 @@ private:
 
     void createVertexBuffer();
     void createIndexBuffer();
+    void createUniformBuffer();
+
+    void updateUniformBuffer();
+    void createDescriptorPool();
+    void createDescriptorSet();
+
+    void createDescriptorSetLayout();
 
     // helper functions
     void createBuffer(vk::DeviceSize          size,
@@ -91,8 +110,15 @@ private:
     vk::Buffer       m_index_buffer;
     vk::DeviceMemory m_index_buffer_memory;
 
+    vk::Buffer       m_uniform_buffer;
+    vk::DeviceMemory m_uniform_buffer_memory;
+
     vk::ShaderModule m_vertex_shader_module;
     vk::ShaderModule m_fragment_shader_module;
+
+    vk::DescriptorPool      m_descriptor_pool;
+    vk::DescriptorSetLayout m_descriptor_set_layout;
+    vk::DescriptorSet       m_descriptor_set;
 
     vk::RenderPass     m_render_pass;
     vk::PipelineLayout m_pipeline_layout;  // used to define shader uniform value layouts
