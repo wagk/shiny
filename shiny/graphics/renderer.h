@@ -71,15 +71,30 @@ private:
     void createDescriptorPool();
     void createDescriptorSet();
 
+    void createTextureImage();
+
     void createDescriptorSetLayout();
 
     // helper functions
-    void createBuffer(vk::DeviceSize          size,
-                      vk::BufferUsageFlags    usage,
-                      vk::MemoryPropertyFlags properties,
-                      vk::Buffer*             buffer,
-                      vk::DeviceMemory*       buffermemory) const;
+    std::pair<vk::Buffer, vk::DeviceMemory> createBuffer(vk::DeviceSize          size,
+                                                         vk::BufferUsageFlags    usage,
+                                                         vk::MemoryPropertyFlags properties) const;
     void copyBuffer(vk::Buffer srcbuffer, vk::Buffer* dstbuffer, vk::DeviceSize size) const;
+
+
+    /*
+    This function requires a closure with a signature of void(void*)
+    */
+    template<typename Func>
+    void withMappedMemory(vk::DeviceMemory memory,
+                          vk::DeviceSize   offset,
+                          vk::DeviceSize   size,
+                          Func             action)
+    {
+        void* data = m_device.mapMemory(memory, offset, size);
+        action(data);
+        m_device.unmapMemory(memory);
+    }
 
     void recreateSwapChain();
     void cleanupSwapChain();

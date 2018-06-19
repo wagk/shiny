@@ -69,6 +69,8 @@ shadow map generation.
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <FreeImage.h>
+
 #define UNREFERENCED_PARAMETER(P) (P)
 
 namespace {
@@ -1575,13 +1577,12 @@ renderer::createVertexBuffer()
     vk::DeviceSize size =
       sizeof(decltype(triangle_vertices)::value_type) * triangle_vertices.size();
 
-    vk::Buffer       stagingbuffer;
-    vk::DeviceMemory stagingbuffermemory;
+    // vk::Buffer       stagingbuffer;
+    // vk::DeviceMemory stagingbuffermemory;
 
-    createBuffer(size, vk::BufferUsageFlagBits::eTransferSrc,
-                 vk::MemoryPropertyFlagBits::eHostVisible
-                   | vk::MemoryPropertyFlagBits::eHostCoherent,
-                 &stagingbuffer, &stagingbuffermemory);
+    auto [stagingbuffer, stagingbuffermemory] = createBuffer(
+      size, vk::BufferUsageFlagBits::eTransferSrc,
+      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
     // Now we copy the triangle vertex data into the buffer
     // You can now simply memcpy the vertex data to the mapped memory and unmap it again using
@@ -1596,20 +1597,23 @@ renderer::createVertexBuffer()
     // contents of the allocated memory. Do keep in mind that this may lead to slightly worse
     // performance than explicit flushing, but we'll see why that doesn't matter in the next
     // chapter.
-    {
-        void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
-        std::memcpy(data, triangle_vertices.data(), size);
-        m_device.unmapMemory(stagingbuffermemory);
-    }
+    // {
+    //     void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
+    //     std::memcpy(data, triangle_vertices.data(), size);
+    //     m_device.unmapMemory(stagingbuffermemory);
+    // }
+
+    withMappedMemory(stagingbuffermemory, 0, size,
+                     [=](void* data) { std::memcpy(data, triangle_vertices.data(), size); });
 
     // The vertexBuffer is now allocated from a memory type that is device local, which generally
     // means that we're not able to use vkMapMemory. However, we can copy data from the
     // stagingBuffer to the vertexBuffer (using copyBuffer()). We have to indicate that we intend to
     // do that by specifying the transfer source flag for the stagingBuffer and the transfer
     // destination flag for the vertexBuffer, along with the vertex buffer usage flag.
-    createBuffer(
+    std::tie(m_vertex_buffer, m_vertex_buffer_memory) = createBuffer(
       size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-      vk::MemoryPropertyFlagBits::eDeviceLocal, &m_vertex_buffer, &m_vertex_buffer_memory);
+      vk::MemoryPropertyFlagBits::eDeviceLocal);
 
     copyBuffer(stagingbuffer, &m_vertex_buffer, size);
 
@@ -1627,23 +1631,25 @@ renderer::createIndexBuffer()
 {
     vk::DeviceSize size = sizeof(decltype(triangle_indices)::value_type) * triangle_indices.size();
 
-    vk::Buffer       stagingbuffer;
-    vk::DeviceMemory stagingbuffermemory;
+    // vk::Buffer       stagingbuffer;
+    // vk::DeviceMemory stagingbuffermemory;
 
-    createBuffer(size, vk::BufferUsageFlagBits::eTransferSrc,
-                 vk::MemoryPropertyFlagBits::eHostVisible
-                   | vk::MemoryPropertyFlagBits::eHostCoherent,
-                 &stagingbuffer, &stagingbuffermemory);
+    auto [stagingbuffer, stagingbuffermemory] = createBuffer(
+      size, vk::BufferUsageFlagBits::eTransferSrc,
+      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-    {
-        void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
-        std::memcpy(data, triangle_indices.data(), size);
-        m_device.unmapMemory(stagingbuffermemory);
-    }
+    // {
+    //     void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
+    //     std::memcpy(data, triangle_indices.data(), size);
+    //     m_device.unmapMemory(stagingbuffermemory);
+    // }
 
-    createBuffer(size,
-                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
-                 vk::MemoryPropertyFlagBits::eDeviceLocal, &m_index_buffer, &m_index_buffer_memory);
+    withMappedMemory(stagingbuffermemory, 0, size,
+                     [=](void* data) { std::memcpy(data, triangle_indices.data(), size); });
+
+    std::tie(m_index_buffer, m_index_buffer_memory) = createBuffer(
+      size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
+      vk::MemoryPropertyFlagBits::eDeviceLocal);
 
     copyBuffer(stagingbuffer, &m_index_buffer, size);
 
@@ -1661,10 +1667,9 @@ renderer::createUniformBuffer()
 {
     vk::DeviceSize buffersize = sizeof(uniformbufferobject);
 
-    createBuffer(buffersize, vk::BufferUsageFlagBits::eUniformBuffer,
-                 vk::MemoryPropertyFlagBits::eHostVisible
-                   | vk::MemoryPropertyFlagBits::eHostCoherent,
-                 &m_uniform_buffer, &m_uniform_buffer_memory);
+    std::tie(m_uniform_buffer, m_uniform_buffer_memory) = createBuffer(
+      buffersize, vk::BufferUsageFlagBits::eUniformBuffer,
+      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 }
 
 /*
@@ -1741,6 +1746,76 @@ renderer::createDescriptorSet()
 }
 
 /*
+The geometry has been colored using per-vertex colors so far, which is a rather limited approach. In
+this part of the tutorial we're going to implement texture mapping to make the geometry look more
+interesting. This will also allow us to load and draw basic 3D models in a future chapter.
+
+Adding a texture to our application will involve the following steps:
+
+  - Create an image object backed by device memory
+  - Fill it with pixels from an image file
+  - Create an image sampler
+  - Add a combined image sampler descriptor to sample colors from the texture
+
+We've already worked with image objects before, but those were automatically created by the swap
+chain extension. This time we'll have to create one by ourselves. Creating an image and filling it
+with data is similar to vertex buffer creation. We'll start by creating a staging resource and
+filling it with pixel data and then we copy this to the final image object that we'll use for
+rendering. Although it is possible to create a staging image for this purpose, Vulkan also allows
+you to copy pixels from a VkBuffer to an image and the API for this is actually faster on some
+hardware. We'll first create this buffer and fill it with pixel values, and then we'll create an
+image to copy the pixels to. Creating an image is not very different from creating buffers. It
+involves querying the memory requirements, allocating device memory and binding it, just like we've
+seen before.
+
+However, there is something extra that we'll have to take care of when working with images. Images
+can have different layouts that affect how the pixels are organized in memory. Due to the way
+graphics hardware works, simply storing the pixels row by row may not lead to the best performance,
+for example. When performing any operation on images, you must make sure that they have the layout
+that is optimal for use in that operation. We've actually already seen some of these layouts when we
+specified the render pass:
+
+  - VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: Optimal for presentation
+  - VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: Optimal as attachment for writing colors from the
+fragment shader
+  - VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL: Optimal as source in a transfer operation,
+like vkCmdCopyImageToBuffer
+  - VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: Optimal as destination in a
+transfer operation, like vkCmdCopyBufferToImage
+  - VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL: Optimal
+for sampling from a shader
+
+One of the most common ways to transition the layout of an image is a pipeline barrier. Pipeline
+barriers are primarily used for synchronizing access to resources, like making sure that an image
+was written to before it is read, but they can also be used to transition layouts. In this chapter
+we'll see how pipeline barriers are used for this purpose. Barriers can additionally be used to
+transfer queue family ownership when using VK_SHARING_MODE_EXCLUSIVE.
+*/
+void
+renderer::createTextureImage()
+{
+    FIBITMAP* bitmap = FreeImage_Load(FIF_JPEG, "./textures/texture.jpg");
+    if (!bitmap) {
+        throw std::runtime_error("Failed to load image!");
+    }
+
+    auto width  = FreeImage_GetWidth(bitmap);
+    auto height = FreeImage_GetHeight(bitmap);
+    bitmap      = FreeImage_ConvertTo32Bits(bitmap);
+
+    vk::DeviceSize imagedim = width * height * 4;  // we load RGBA
+
+    auto [stagingbuffer, stagingbuffermemory] = createBuffer(
+      imagedim, vk::BufferUsageFlagBits::eTransferSrc,
+      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+    withMappedMemory(stagingbuffermemory, 0, imagedim,
+                     [=](void* data) { std::memcpy(data, bitmap, (size_t)imagedim); });
+
+    FreeImage_Unload(bitmap);
+}
+
+/*
 This is practically the core loop. Here we update and load the uniform variables per frame.
 
 The tutorial mentioned something about push variables that are more efficient at sending small
@@ -1772,11 +1847,14 @@ renderer::updateUniformBuffer()
     // upside down.
     ubo.proj[1][1] *= -1;
 
-    {
-        void* data = m_device.mapMemory(m_uniform_buffer_memory, 0, sizeof(ubo));
-        std::memcpy(data, &ubo, sizeof(ubo));
-        m_device.unmapMemory(m_uniform_buffer_memory);
-    }
+    // {
+    //     void* data = m_device.mapMemory(m_uniform_buffer_memory, 0, sizeof(ubo));
+    //     std::memcpy(data, &ubo, sizeof(ubo));
+    //     m_device.unmapMemory(m_uniform_buffer_memory);
+    // }
+
+    withMappedMemory(m_uniform_buffer_memory, 0, sizeof(ubo),
+                     [=](void* data) { std::memcpy(data, &ubo, sizeof(ubo)); });
 }
 
 /*
@@ -1812,16 +1890,11 @@ renderer::createDescriptorSetLayout()
 /*
 This is a helper function to create a buffer, allocate some memory for it, and bind them together
 */
-void
+std::pair<vk::Buffer, vk::DeviceMemory>
 renderer::createBuffer(vk::DeviceSize          size,
                        vk::BufferUsageFlags    usage,
-                       vk::MemoryPropertyFlags properties,
-                       vk::Buffer*             buffer,
-                       vk::DeviceMemory*       buffermemory) const
+                       vk::MemoryPropertyFlags properties) const
 {
-    if (!buffer || !buffermemory)
-        return;
-
     auto bufferinfo =
       vk::BufferCreateInfo()
         // The first field of the struct is size, which specifies the size of the buffer in bytes.
@@ -1835,12 +1908,12 @@ renderer::createBuffer(vk::DeviceSize          size,
         // the graphics queue, so we can stick to exclusive access.
         .setSharingMode(vk::SharingMode::eExclusive);
 
-    *buffer = m_device.createBuffer(bufferinfo);
+    auto buffer = m_device.createBuffer(bufferinfo);
 
     // The buffer has been created, but it doesn't actually have any memory assigned to it yet. The
     // first step of allocating memory for the buffer is to query its memory requirements using the
     // aptly named vkGetBufferMemoryRequirements function.
-    vk::MemoryRequirements memrequirements = m_device.getBufferMemoryRequirements(*buffer);
+    vk::MemoryRequirements memrequirements = m_device.getBufferMemoryRequirements(buffer);
 
     // The VkMemoryRequirements struct has three fields:
     //  - size: The size of the required amount of memory in bytes, may differ from bufferInfo.size.
@@ -1853,13 +1926,15 @@ renderer::createBuffer(vk::DeviceSize          size,
                           .setMemoryTypeIndex(findMemoryType(
                             m_physical_device, memrequirements.memoryTypeBits, properties));
 
-    *buffermemory = m_device.allocateMemory(memallocinfo);
+    auto buffermemory = m_device.allocateMemory(memallocinfo);
 
     // The first three parameters are self-explanatory and the fourth parameter is the offset within
     // the region of memory. Since this memory is allocated specifically for this the vertex buffer,
     // the offset is simply 0. If the offset is non-zero, then it is required to be divisible by
     // memRequirements.alignment.
-    m_device.bindBufferMemory(*buffer, *buffermemory, 0);
+    m_device.bindBufferMemory(buffer, buffermemory, 0);
+
+    return { buffer, buffermemory };
 }
 
 /*
@@ -1965,6 +2040,7 @@ renderer::initVulkan()
     createGraphicsPipeline();
     createFramebuffers();
     createCommandPool();
+    // createTextureImage();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffer();

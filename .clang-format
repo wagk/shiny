@@ -38,9 +38,6 @@ BreakBeforeInheritanceComma : false
 BreakBeforeTernaryOperators : true
 BreakConstructorInitializers : BeforeComma
 
-SplitEmptyRecord : true
-
-SplitEmptyNamespace : true
 CompactNamespaces : false
 FixNamespaceComments : true
 NamespaceIndentation : Inner
