@@ -69,7 +69,11 @@ shadow map generation.
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include <FreeImage.h>
+// The header only defines the prototypes of the functions by default. One code file needs to
+// include the header with the STB_IMAGE_IMPLEMENTATION definition to include the function bodies,
+// otherwise we'll get linking errors.
+#define STB_IMAGE_IMPLEMENTATION
+#include <include/stb_image.h>
 
 #define UNREFERENCED_PARAMETER(P) (P)
 
@@ -1794,16 +1798,12 @@ transfer queue family ownership when using VK_SHARING_MODE_EXCLUSIVE.
 void
 renderer::createTextureImage()
 {
-    FIBITMAP* bitmap = FreeImage_Load(FIF_JPEG, "./textures/texture.jpg");
-    if (!bitmap) {
+    int      width, height, channels;
+    stbi_uc* pixels = stbi_load("textures/texture.jpg", &width, &height, &channels, STBI_rgb_alpha);
+
+    if (!pixels) {
         throw std::runtime_error("Failed to load image!");
     }
-
-    auto width  = FreeImage_GetWidth(bitmap);
-    auto height = FreeImage_GetHeight(bitmap);
-
-    // No need to convert this apparently
-    // bitmap      = FreeImage_ConvertTo32Bits(bitmap);
 
     vk::DeviceSize imagedim = width * height * 4;  // we load RGBA
 
@@ -1815,9 +1815,14 @@ renderer::createTextureImage()
     // systems.
 
     withMappedMemory(stagingbuffermemory, 0, imagedim,
-                     [=](void* data) { std::memcpy(data, bitmap, (size_t)imagedim); });
+                     [=](void* data) { std::memcpy(data, pixels, (size_t)imagedim); });
 
-    FreeImage_Unload(bitmap);
+    stbi_image_free(pixels);
+
+    std::tie(m_texture_image, m_texture_image_memory) =
+      createImage(width, height, vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
+                  vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+                  vk::MemoryPropertyFlagBits::eDeviceLocal);
 }
 
 /*
@@ -1942,6 +1947,75 @@ renderer::createBuffer(vk::DeviceSize          size,
     return { buffer, buffermemory };
 }
 
+std::pair<vk::Image, vk::DeviceMemory>
+renderer::createImage(uint32_t                width,
+                      uint32_t                height,
+                      vk::Format              format,
+                      vk::ImageTiling         tiling,
+                      vk::ImageUsageFlags     usage,
+                      vk::MemoryPropertyFlags properties)
+
+{
+    auto imageinfo =
+      vk::ImageCreateInfo()
+        // The image type, specified in the imageType field, tells Vulkan with what kind of
+        // coordinate system the texels in the image are going to be addressed. It is possible to
+        // create 1D, 2D and 3D images. One dimensional images can be used to store an array of data
+        // or gradient, two dimensional images are mainly used for textures, and three dimensional
+        // images can be used to store voxel volumes, for example.
+        .setImageType(vk::ImageType::e2D)
+        //  The extent field specifies the dimensions of the image, basically how many texels there
+        //  are on each axis. That's why depth must be 1 instead of 0
+        .setExtent(vk::Extent3D(width, height, 1))
+        .setMipLevels(1)
+        .setArrayLayers(1)
+        // Vulkan supports many possible image formats, but we should use the same format for the
+        // texels as the pixels in the buffer, otherwise the copy operation will fail.
+        .setFormat(format)
+        // The tiling field can have one of two values:
+        //     VK_IMAGE_TILING_LINEAR: Texels are laid out in row-major order like our pixels array
+        //     VK_IMAGE_TILING_OPTIMAL: Texels are laid out in an implementation defined order for
+        //     optimal access
+        // Unlike the layout of an image, the tiling mode cannot be changed at a later time. If you
+        // want to be able to directly access texels in the memory of the image, then you must use
+        // VK_IMAGE_TILING_LINEAR. We will be using a staging buffer instead of a staging image, so
+        // this won't be necessary. We will be using VK_IMAGE_TILING_OPTIMAL for efficient access
+        // from the shader.
+        .setTiling(tiling)
+        .setInitialLayout(vk::ImageLayout::eUndefined)
+        // The usage field has the same semantics as the one during buffer creation. The image is
+        // going to be used as destination for the buffer copy, so it should be set up as a transfer
+        // destination. We also want to be able to access the image from the shader to color our
+        // mesh, so the usage should include VK_IMAGE_USAGE_SAMPLED_BIT.
+        .setUsage(usage)
+        // The samples flag is related to multisampling. This is only relevant for images that will
+        // be used as attachments, so stick to one sample. There are some optional flags for images
+        // that are related to sparse images. Sparse images are images where only certain regions
+        // are actually backed by memory. If you were using a 3D texture for a voxel terrain, for
+        // example, then you could use this to avoid allocating memory to store large volumes of
+        // "air" values. We won't be using it in this tutorial, so leave it to its default value of
+        // 0.
+        .setSamples(vk::SampleCountFlagBits::e1)
+        // The image will only be used by one queue family: the one that supports graphics (and
+        // therefore also) transfer operations.
+        .setSharingMode(vk::SharingMode::eExclusive);
+
+    vk::Image image = m_device.createImage(imageinfo);
+
+    vk::MemoryRequirements memrequirements = m_device.getImageMemoryRequirements(image);
+
+    auto allocinfo = vk::MemoryAllocateInfo()
+                       .setAllocationSize(memrequirements.size)
+                       .setMemoryTypeIndex(findMemoryType(
+                         m_physical_device, memrequirements.memoryTypeBits, properties));
+
+    vk::DeviceMemory memory = m_device.allocateMemory(allocinfo);
+
+    m_device.bindImageMemory(image, memory, 0);
+
+    return { image, memory };
+}
+
 /*
 Memory transfer operations are executed using command buffers, just like drawing commands. Therefore
 we must first allocate a temporary command buffer. You may wish to create a separate command pool
@@ -1954,6 +2028,15 @@ renderer::copyBuffer(vk::Buffer src, vk::Buffer* dst, vk::DeviceSize size) const
 {
     if (!src || !dst)
         return;
+
+    // This does not work, nothing will be drawn
+
+    // executeSingleTimeCommands([=](vk::CommandBuffer& commandbuf) {
+    //     vk::BufferCopy copyregion(size);
+    //     commandbuf.copyBuffer(src, *dst, 1, &copyregion);
+    // });
+
+    // ... while this does work, drawing a rectangle
 
     auto allocinfo = vk::CommandBufferAllocateInfo()
                        .setLevel(vk::CommandBufferLevel::ePrimary)
@@ -1974,12 +2057,6 @@ renderer::copyBuffer(vk::Buffer src, vk::Buffer* dst, vk::DeviceSize size) const
     auto submitinfo = vk::SubmitInfo().setCommandBufferCount(1).setPCommandBuffers(&commandbuffer);
 
     m_graphics_queue.submit(submitinfo, nullptr);
-    // Unlike the draw commands, there are no events we need to wait on this time. We just want to
-    // execute the transfer on the buffers immediately. There are again two possible ways to wait on
-    // this transfer to complete. We could use a fence and wait with vkWaitForFences, or simply wait
-    // for the transfer queue to become idle with vkQueueWaitIdle. A fence would allow you to
-    // schedule multiple transfers simultaneously and wait for all of them complete, instead of
-    // executing one at a time. That may give the driver more opportunities to optimize.
     m_graphics_queue.waitIdle();
 
     m_device.freeCommandBuffers(m_command_pool, 1, &commandbuffer);
@@ -2100,6 +2177,9 @@ renderer::cleanup()
 
     m_device.destroyBuffer(m_uniform_buffer);
     m_device.freeMemory(m_uniform_buffer_memory);
+
+    m_device.destroyImage(m_texture_image);
+    m_device.freeMemory(m_texture_image_memory);
 
     m_device.destroyShaderModule(m_vertex_shader_module);
     m_device.destroyShaderModule(m_fragment_shader_module);
