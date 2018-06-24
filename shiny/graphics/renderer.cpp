@@ -2029,37 +2029,10 @@ renderer::copyBuffer(vk::Buffer src, vk::Buffer* dst, vk::DeviceSize size) const
     if (!src || !dst)
         return;
 
-    // This does not work, nothing will be drawn
-
-    // executeSingleTimeCommands([=](vk::CommandBuffer& commandbuf) {
-    //     vk::BufferCopy copyregion(size);
-    //     commandbuf.copyBuffer(src, *dst, 1, &copyregion);
-    // });
-
-    // ... while this does work, drawing a rectangle
-
-    auto allocinfo = vk::CommandBufferAllocateInfo()
-                       .setLevel(vk::CommandBufferLevel::ePrimary)
-                       .setCommandPool(m_command_pool)
-                       .setCommandBufferCount(1);
-
-    // NOTE: We get the first one because we know the buffercount is one
-    auto commandbuffer = m_device.allocateCommandBuffers(allocinfo).front();
-    auto begininfo =
-      vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-
-    recordCommandBuffer(commandbuffer, begininfo, [=]() {
+    executeSingleTimeCommands([=](vk::CommandBuffer& commandbuf) {
         auto copyregion = vk::BufferCopy().setSize(size);
-
-        commandbuffer.copyBuffer(src, *dst, 1, &copyregion);
+        commandbuf.copyBuffer(src, *dst, 1, &copyregion);
     });
-
-    auto submitinfo = vk::SubmitInfo().setCommandBufferCount(1).setPCommandBuffers(&commandbuffer);
-
-    m_graphics_queue.submit(submitinfo, nullptr);
-    m_graphics_queue.waitIdle();
-
-    m_device.freeCommandBuffers(m_command_pool, 1, &commandbuffer);
 }
 
 /*
