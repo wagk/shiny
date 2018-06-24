@@ -1,5 +1,4 @@
-/*
-Brief overview of the graphics pipeline
+/*Brief overview of the graphics pipeline
 
 The input assembler collects the raw vertex data from the buffers you specify and may also use an
 index buffer to repeat certain elements without having to duplicate the vertex data itself.
@@ -1814,10 +1813,58 @@ renderer::createTextureImage()
     // NOTE: We might have to manipulate the bitmap because it stores things as BGRA for big-endian
     // systems.
 
-    withMappedMemory(stagingbuffermemory, 0, imagedim,
-                     [=](void* data) { std::memcpy(data, bitmap, (size_t)imagedim); });
+    /*withMappedMemory(stagingbuffermemory, 0, imagedim,
+                     [=](void* data) { std::memcpy(data, bitmap, imagedim); });*/
 
     FreeImage_Unload(bitmap);
+
+    createImage(width, height, vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
+                vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+                vk::MemoryPropertyFlagBits::eDeviceLocal, m_textureImage, m_textureImageMemory);
+
+    m_device.destroyBuffer(stagingbuffer);
+    m_device.freeMemory(stagingbuffermemory);
+}
+
+void
+renderer::createImage(uint32_t                width,
+                      uint32_t                height,
+                      vk::Format              format,
+                      vk::ImageTiling         tiling,
+                      vk::ImageUsageFlags     usage,
+                      vk::MemoryPropertyFlags properties,
+                      vk::Image&              image,
+                      vk::DeviceMemory&       imageMemory)
+{
+    vk::ImageCreateInfo imageInfo;
+    // imageInfo.flags = ;
+    imageInfo.imageType   = vk::ImageType::e2D;
+    imageInfo.format      = vk::Format::eR8G8B8A8Unorm;
+    imageInfo.extent      = vk::Extent3D{ width, height, 1 };
+    imageInfo.mipLevels   = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples     = vk::SampleCountFlagBits::e1;
+    imageInfo.tiling      = vk::ImageTiling::eOptimal;
+    imageInfo.usage       = vk::ImageUsageFlagBits::eColorAttachment;
+    imageInfo.sharingMode = vk::SharingMode::eExclusive;
+
+    if (m_device.createImage(&imageInfo, nullptr, &image) != vk::Result::eSuccess) {
+        throw std::runtime_error("failed to create image!");
+    }
+
+    vk::MemoryRequirements memRequirements;
+    m_device.getImageMemoryRequirements(image, &memRequirements);
+
+    vk::MemoryAllocateInfo allocInfo;
+    allocInfo.setAllocationSize(memRequirements.size);
+    allocInfo.memoryTypeIndex =
+      findMemoryType(m_physical_device, memRequirements.memoryTypeBits, properties);
+
+    if (m_device.allocateMemory(&allocInfo, nullptr, &imageMemory) != vk::Result::eSuccess) {
+        throw std::runtime_error("failed to allocate image memory!");
+    }
+
+    m_device.bindImageMemory(image, imageMemory, 0);
 }
 
 /*
@@ -2084,6 +2131,10 @@ renderer::cleanup()
     }
 
     cleanupSwapChain();
+
+    // delete image and free up memory
+    vkDestroyImage(m_device, m_textureImage, nullptr);
+    vkFreeMemory(m_device, m_textureImageMemory, nullptr);
 
     m_device.destroyDescriptorPool(m_descriptor_pool);
 

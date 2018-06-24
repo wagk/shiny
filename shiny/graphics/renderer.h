@@ -72,6 +72,14 @@ private:
     void createDescriptorSet();
 
     void createTextureImage();
+    void createImage(uint32_t                width,
+                     uint32_t                height,
+                     vk::Format              format,
+                     vk::ImageTiling         tiling,
+                     vk::ImageUsageFlags     usage,
+                     vk::MemoryPropertyFlags properties,
+                     vk::Image&              image,
+                     vk::DeviceMemory&       imageMemory);
 
     void createDescriptorSetLayout();
 
@@ -109,6 +117,10 @@ private:
     vk::SurfaceKHR             m_surface;
     vk::PhysicalDevice         m_physical_device;
     vk::Device                 m_device;
+
+    // Image stuff
+    vk::Image        m_textureImage;
+    vk::DeviceMemory m_textureImageMemory;
 
     // swapchain things
     // TODO: Find a way to turn this back into a UniqueSwapchainKHR
