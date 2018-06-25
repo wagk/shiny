@@ -1802,7 +1802,7 @@ renderer::createTextureImage()
     auto height = FreeImage_GetHeight(bitmap);
 
     // No need to convert this apparently
-    // bitmap      = FreeImage_ConvertTo32Bits(bitmap);
+    bitmap = FreeImage_ConvertTo32Bits(bitmap);
 
     vk::DeviceSize imagedim = width * height * 4;  // we load RGBA
 
@@ -1813,8 +1813,8 @@ renderer::createTextureImage()
     // NOTE: We might have to manipulate the bitmap because it stores things as BGRA for big-endian
     // systems.
 
-    /*withMappedMemory(stagingbuffermemory, 0, imagedim,
-                     [=](void* data) { std::memcpy(data, bitmap, imagedim); });*/
+    withMappedMemory(stagingbuffermemory, 0, imagedim,
+                     [=](void* data) { std::memcpy(data, bitmap, (size_t)imagedim); });
 
     FreeImage_Unload(bitmap);
 
