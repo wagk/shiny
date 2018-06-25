@@ -72,14 +72,6 @@ private:
     void createDescriptorSet();
 
     void createTextureImage();
-    void createImage(uint32_t                width,
-                     uint32_t                height,
-                     vk::Format              format,
-                     vk::ImageTiling         tiling,
-                     vk::ImageUsageFlags     usage,
-                     vk::MemoryPropertyFlags properties,
-                     vk::Image&              image,
-                     vk::DeviceMemory&       imageMemory);
 
     void createDescriptorSetLayout();
 
@@ -88,6 +80,16 @@ private:
                                                          vk::BufferUsageFlags    usage,
                                                          vk::MemoryPropertyFlags properties) const;
     void copyBuffer(vk::Buffer srcbuffer, vk::Buffer* dstbuffer, vk::DeviceSize size) const;
+
+    std::pair<vk::Image, vk::DeviceMemory> createImage(uint32_t                width,
+                                                       uint32_t                height,
+                                                       vk::Format              format,
+                                                       vk::ImageTiling         tiling,
+                                                       vk::ImageUsageFlags     usage,
+                                                       vk::MemoryPropertyFlags properties) const;
+
+    template<typename Func>
+    void executeSingleTimeCommands(Func func) const;
 
 
     /*
@@ -140,6 +142,9 @@ private:
     vk::Buffer       m_uniform_buffer;
     vk::DeviceMemory m_uniform_buffer_memory;
 
+    vk::Image        m_texture_image;
+    vk::DeviceMemory m_texture_image_memory;
+
     vk::ShaderModule m_vertex_shader_module;
     vk::ShaderModule m_fragment_shader_module;
 
@@ -164,6 +169,42 @@ private:
     vk::Queue m_graphics_queue;
     vk::Queue m_presentation_queue;
 };
+
+/*
+The signature for Func must satisfy void(vk::CommandBuffer)
+*/
+template<typename Func>
+void
+renderer::executeSingleTimeCommands(Func func) const
+{
+    auto allocinfo = vk::CommandBufferAllocateInfo()
+                       .setLevel(vk::CommandBufferLevel::ePrimary)
+                       .setCommandPool(m_command_pool)
+                       .setCommandBufferCount(1);
+
+    vk::CommandBuffer commandbuffer = m_device.allocateCommandBuffers(allocinfo).front();
+
+    auto begininfo = vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+    commandbuffer.begin(begininfo);
+
+    func(commandbuffer);
+
+    commandbuffer.end();
+
+    auto submitinfo = vk::SubmitInfo().setCommandBufferCount(1).setPCommandBuffers(&commandbuffer);
+
+    m_graphics_queue.submit(submitinfo, nullptr);
+    // Unlike the draw commands, there are no events we need to wait on this time. We just want to
+    // execute the transfer on the buffers immediately. There are again two possible ways to wait on
+    // this transfer to complete. We could use a fence and wait with vkWaitForFences, or simply wait
+    // for the transfer queue to become idle with vkQueueWaitIdle. A fence would allow you to
+    // schedule multiple transfers simultaneously and wait for all of them complete, instead of
+    // executing one at a time. That may give the driver more opportunities to optimize.
+    m_graphics_queue.waitIdle();
+
+    m_device.freeCommandBuffers(m_command_pool, 1, &commandbuffer);
+}
 
 template<typename Func>
 void
