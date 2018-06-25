@@ -22,4 +22,5 @@ private:
     int         m_height;
     GLFWwindow* m_window = nullptr;
 };
+
 }  // namespace shiny

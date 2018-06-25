@@ -70,14 +70,14 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LibraryPath>$(ProjectDir)libs\;$(LibraryPath);</LibraryPath>
+    <LibraryPath>$(ProjectDir)libs\;$(LibraryPath);$(VULKAN_SDK)\Lib;</LibraryPath>
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
-    <SourcePath>$(VC_SourcePath);</SourcePath>
+    <SourcePath>$(VC_SourcePath);$(VULKAN_SDK)\Source\lib;</SourcePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LibraryPath>$(ProjectDir)libs\;$(LibraryPath);</LibraryPath>
+    <LibraryPath>$(ProjectDir)libs\;$(LibraryPath);$(VULKAN_SDK)\Lib;</LibraryPath>
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
-    <SourcePath>$(VC_SourcePath);</SourcePath>
+    <SourcePath>$(VC_SourcePath);$(VULKAN_SDK)\Source\lib;</SourcePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
@@ -87,9 +87,10 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
+      <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
     </ClCompile>
     <CustomBuildStep>
       <Command>
@@ -109,7 +110,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir);</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
@@ -127,14 +128,19 @@
     <PostBuildEvent>
       <Message>Copy the dlls over</Message>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>glslangValidator.exe -V $(ProjectDir)shaders\shader.vert -o $(ProjectDir)shaders\vert.spv
+glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders\frag.spv</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
+      <WarningLevel>Level4</WarningLevel>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -160,7 +166,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir);</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
@@ -180,20 +186,20 @@
     <PostBuildEvent>
       <Message>Copy the dlls over</Message>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>glslangValidator.exe -V $(ProjectDir)shaders\shader.vert -o $(ProjectDir)shaders\vert.spv
+glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders\frag.spv</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="graphics\renderer.cpp" />
+    <ClCompile Include="graphics\vk\instance.cpp" />
     <ClCompile Include="include\glm\detail\glm.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="renderer.cpp" />
-    <ClCompile Include="vk\ext\surface.cpp" />
-    <ClCompile Include="vk\instance.cpp" />
-    <ClCompile Include="vk\logical_device.cpp" />
-    <ClCompile Include="vk\physical_device.cpp" />
-    <ClCompile Include="vk\queue.cpp" />
-    <ClCompile Include="vk\queue_families.cpp" />
-    <ClCompile Include="window.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="graphics\renderer.h" />
+    <ClInclude Include="graphics\vk\instance.h" />
     <ClInclude Include="include\FreeImage.h" />
     <ClInclude Include="include\GLFW\glfw3.h" />
     <ClInclude Include="include\GLFW\glfw3native.h" />
@@ -346,25 +352,6 @@
     <ClInclude Include="include\glm\vector_relational.hpp" />
     <ClInclude Include="include\stb_image.h" />
     <ClInclude Include="include\tiny_obj_loader.h" />
-    <ClInclude Include="include\vulkan\GLSL.std.450.h" />
-    <ClInclude Include="include\vulkan\icd-spv.h" />
-    <ClInclude Include="include\vulkan\spirv.h" />
-    <ClInclude Include="include\vulkan\spirv.hpp" />
-    <ClInclude Include="include\vulkan\vk_icd.h" />
-    <ClInclude Include="include\vulkan\vk_layer.h" />
-    <ClInclude Include="include\vulkan\vk_platform.h" />
-    <ClInclude Include="include\vulkan\vk_sdk_platform.h" />
-    <ClInclude Include="include\vulkan\vulkan.h" />
-    <ClInclude Include="include\vulkan\vulkan.hpp" />
-    <ClInclude Include="renderer.h" />
-    <ClInclude Include="vk\ext\surface.h" />
-    <ClInclude Include="vk\instance.h" />
-    <ClInclude Include="vk\logical_device.h" />
-    <ClInclude Include="vk\physical_device.h" />
-    <ClInclude Include="vk\queue.h" />
-    <ClInclude Include="vk\queue_families.h" />
-    <ClInclude Include="vk\utils.h" />
-    <ClInclude Include="window.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="include\glm\detail\func_common.inl" />

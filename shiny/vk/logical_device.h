@@ -25,8 +25,19 @@ public:
     /*
       Queues belong to the logical device, they automatically created along with
       the device, but we need to assign handles to them
-    */
-    queue get_queue() const;
+
+      // TODO: We need to add parameters to this function, to get different
+      // queue types. We might also need to define some enums and adjust some
+      // interfaces for this to work
+
+      // TODO: Be able to query presentation queues from it, not just graphics
+      // like what it's doing right now
+
+      // NOTE: This will now take in an index that must be provided. This index
+      // would represent the queue family index that is maintained by
+      // queue_families
+      */
+    queue get_queue(int index) const;
 
 private:
     VkDevice       m_device = VK_NULL_HANDLE;

@@ -38,10 +38,10 @@ logical_device::operator=(logical_device&& other)
 }
 
 queue
-logical_device::get_queue() const
+logical_device::get_queue(int index) const
 {
     VkQueue device_queue;
-    vkGetDeviceQueue(m_device, m_indices.graphics_family(), 0, &device_queue);
+    vkGetDeviceQueue(m_device, index, 0, &device_queue);
     return queue(device_queue);
 }
 

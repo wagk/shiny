@@ -1,6 +1,8 @@
 # shiny
 shiny::engine
 
+Please ensure that you have the Vulkan SDK installed. The build relies on environment variables that it sets
+
 # Development
 
 You should download the following plugins for maximum fun and profit while

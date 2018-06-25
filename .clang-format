@@ -45,7 +45,7 @@ ConstructorInitializerAllOnOneLineOrOnePerLine : false
 
 Cpp11BracedListStyle : false
 
-IncludeBlocks : Preserve
+# IncludeBlocks : Preserve
 
 IndentCaseLabels : false
 IndentWrappedFunctionNames : false

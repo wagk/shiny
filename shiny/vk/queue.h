@@ -7,6 +7,8 @@ namespace shiny::vk {
 class queue
 {
 public:
+    using create_info = VkDeviceQueueCreateInfo;
+
     explicit queue(const VkQueue& queue);
 
     operator VkQueue() const { return m_queue; }
