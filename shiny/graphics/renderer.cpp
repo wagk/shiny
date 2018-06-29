@@ -2204,6 +2204,12 @@ renderer::mainLoop()
 void
 renderer::cleanup()
 {
+    /*for (size_t i = 0; i < max_frames_in_flight; ++i) {
+        m_device.destroySemaphore(m_render_finished_semaphores[i], nullptr);
+        m_device.destroySemaphore(m_image_available_semaphores[i], nullptr);
+        m_device.destroyFence(m_in_flight_fences[i], nullptr);
+    }*/
+
     for (auto& fence : m_in_flight_fences) {
         m_device.destroyFence(fence);
     }
@@ -2218,28 +2224,24 @@ renderer::cleanup()
 
     cleanupSwapChain();
 
-    // delete image and free up memory
-    vkDestroyImage(m_device, m_textureImage, nullptr);
-    vkFreeMemory(m_device, m_textureImageMemory, nullptr);
-
     m_device.destroyDescriptorPool(m_descriptor_pool);
-
     m_device.destroyDescriptorSetLayout(m_descriptor_set_layout);
-
-    // command buffers are implicitly deleted when their command pool is deleted
-    m_device.destroyCommandPool(m_command_pool);
-
-    m_device.destroyBuffer(m_vertex_buffer);
-    m_device.freeMemory(m_vertex_buffer_memory);
-
-    m_device.destroyBuffer(m_index_buffer);
-    m_device.freeMemory(m_index_buffer_memory);
 
     m_device.destroyBuffer(m_uniform_buffer);
     m_device.freeMemory(m_uniform_buffer_memory);
 
+    m_device.destroyBuffer(m_index_buffer);
+    m_device.freeMemory(m_index_buffer_memory);
+
+    m_device.destroyBuffer(m_vertex_buffer);
+    m_device.freeMemory(m_vertex_buffer_memory);
+
+    // delete image and free up memory
     m_device.destroyImage(m_texture_image);
     m_device.freeMemory(m_texture_image_memory);
+
+    // command buffers are implicitly deleted when their command pool is deleted
+    m_device.destroyCommandPool(m_command_pool);
 
     m_device.destroyShaderModule(m_vertex_shader_module);
     m_device.destroyShaderModule(m_fragment_shader_module);
