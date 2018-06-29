@@ -88,9 +88,15 @@ private:
                                                        vk::ImageUsageFlags     usage,
                                                        vk::MemoryPropertyFlags properties) const;
 
+    void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) const;
+
+    void transitionImageLayout(vk::Image       image,
+                               vk::Format      format,
+                               vk::ImageLayout oldLayout,
+                               vk::ImageLayout newLayout) const;
+
     template<typename Func>
     void executeSingleTimeCommands(Func func) const;
-
 
     /*
     This function requires a closure with a signature of void(void*)

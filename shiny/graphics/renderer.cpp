@@ -1822,6 +1822,16 @@ renderer::createTextureImage()
       createImage(width, height, vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
                   vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
                   vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+    transitionImageLayout(m_texture_image, vk::Format::eR8G8B8A8Unorm, vk::ImageLayout::eUndefined,
+                          vk::ImageLayout::eTransferDstOptimal);
+    copyBufferToImage(stagingbuffer, m_texture_image, width, height);
+    transitionImageLayout(m_texture_image, vk::Format::eR8G8B8A8Unorm,
+                          vk::ImageLayout::eTransferDstOptimal,
+                          vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    m_device.destroyBuffer(stagingbuffer, nullptr);
+    m_device.freeMemory(stagingbuffermemory, nullptr);
 }
 
 
@@ -2016,6 +2026,30 @@ renderer::createImage(uint32_t                width,
     return { image, memory };
 }
 
+void
+renderer::copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) const
+{
+    if (!buffer || !image)
+        return;
+
+    executeSingleTimeCommands([=](vk::CommandBuffer commandBuffer) {
+        vk::BufferImageCopy region;
+        region.setBufferOffset(0)
+          .setBufferImageHeight(0)
+          .setBufferRowLength(0)
+
+          .imageSubresource.setAspectMask(vk::ImageAspectFlagBits::eColor)
+          .setMipLevel(0)
+          .setBaseArrayLayer(0)
+          .setLayerCount(1);
+        region.setImageOffset({ 0, 0, 0 });
+        region.setImageExtent({ width, height, 1 });
+
+        commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal,
+                                        region);
+    });
+}
+
 /*
 Memory transfer operations are executed using command buffers, just like drawing commands. Therefore
 we must first allocate a temporary command buffer. You may wish to create a separate command pool
@@ -2032,6 +2066,55 @@ renderer::copyBuffer(vk::Buffer src, vk::Buffer* dst, vk::DeviceSize size) const
     executeSingleTimeCommands([=](vk::CommandBuffer& commandbuf) {
         auto copyregion = vk::BufferCopy().setSize(size);
         commandbuf.copyBuffer(src, *dst, 1, &copyregion);
+    });
+}
+
+void
+renderer::transitionImageLayout(vk::Image       image,
+                                vk::Format      format,
+                                vk::ImageLayout oldLayout,
+                                vk::ImageLayout newLayout) const
+{
+    if (!image) {
+        return;
+    }
+
+    executeSingleTimeCommands([=](vk::CommandBuffer commandBuffer) {
+        vk::ImageMemoryBarrier barrier(
+          vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eTransferRead,
+          vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eTransferSrcOptimal, 0, 0, image);
+        barrier.setOldLayout(oldLayout)
+          .setNewLayout(newLayout)
+          .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+          .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+          .setImage(image)
+          .subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor)
+          .setBaseMipLevel(0)
+          .setLevelCount(1)
+          .setBaseArrayLayer(0)
+          .setLayerCount(1);
+
+        vk::PipelineStageFlags sourceStage;
+        vk::PipelineStageFlags destStage;
+
+        if (oldLayout == vk::ImageLayout::eUndefined
+            && newLayout == vk::ImageLayout::eTransferDstOptimal) {
+            barrier.setSrcAccessMask(vk::AccessFlagBits());
+            barrier.setDstAccessMask(vk::AccessFlagBits::eTransferWrite);
+            sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+            destStage   = vk::PipelineStageFlagBits::eTransfer;
+        } else if (oldLayout == vk::ImageLayout::eTransferDstOptimal
+                   && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+            barrier.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite);
+            barrier.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+            sourceStage = vk::PipelineStageFlagBits::eTransfer;
+            destStage   = vk::PipelineStageFlagBits::eFragmentShader;
+        } else {
+            throw std::invalid_argument("Unsupported layout transition!");
+        }
+
+        commandBuffer.pipelineBarrier(sourceStage, destStage, vk::DependencyFlagBits::eByRegion,
+                                      (uint32_t)0, nullptr, (uint32_t)0, nullptr, 1, &barrier);
     });
 }
 

@@ -193,13 +193,11 @@ glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="graphics\renderer.cpp" />
-    <ClCompile Include="graphics\vk\instance.cpp" />
     <ClCompile Include="include\glm\detail\glm.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="graphics\renderer.h" />
-    <ClInclude Include="graphics\vk\instance.h" />
     <ClInclude Include="include\FreeImage.h" />
     <ClInclude Include="include\GLFW\glfw3.h" />
     <ClInclude Include="include\GLFW\glfw3native.h" />
