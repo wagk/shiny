@@ -939,23 +939,7 @@ renderer::createImageViews()
     m_swapchain_image_views.reserve(m_swapchain_images.size());
 
     for (const vk::Image& image : m_swapchain_images) {
-        auto createinfo = vk::ImageViewCreateInfo()
-                            .setImage(image)
-                            .setViewType(vk::ImageViewType::e2D)
-                            .setFormat(m_swapchain_image_format)
-                            .setComponents(vk::ComponentMapping()
-                                             .setR(vk::ComponentSwizzle::eIdentity)
-                                             .setG(vk::ComponentSwizzle::eIdentity)
-                                             .setB(vk::ComponentSwizzle::eIdentity)
-                                             .setA(vk::ComponentSwizzle::eIdentity))
-                            .setSubresourceRange(vk::ImageSubresourceRange()
-                                                   .setAspectMask(vk::ImageAspectFlagBits::eColor)
-                                                   .setBaseMipLevel(0)
-                                                   .setLevelCount(1)
-                                                   .setBaseArrayLayer(0)
-                                                   .setLayerCount(1));
-
-        m_swapchain_image_views.emplace_back(m_device.createImageView(createinfo));
+        m_swapchain_image_views.emplace_back(createImageView(image, m_swapchain_image_format));
     }
 }
 
@@ -1837,6 +1821,12 @@ renderer::createTextureImage()
     m_device.freeMemory(stagingbuffermemory, nullptr);
 }
 
+void
+renderer::createTextureImageView()
+{
+    m_texture_image_view = createImageView(m_texture_image, vk::Format::eR8G8B8A8Unorm);
+}
+
 
 /*
 This is practically the core loop. Here we update and load the uniform variables per frame.
@@ -2164,6 +2154,33 @@ renderer::transitionImageLayout(vk::Image       image,
     });
 }
 
+vk::ImageView
+renderer::createImageView(vk::Image image, vk::Format format)
+{
+    auto createinfo = vk::ImageViewCreateInfo()
+                        .setImage(image)
+                        .setViewType(vk::ImageViewType::e2D)
+                        .setFormat(format)
+                        .setComponents(vk::ComponentMapping()
+                                         .setR(vk::ComponentSwizzle::eIdentity)
+                                         .setG(vk::ComponentSwizzle::eIdentity)
+                                         .setB(vk::ComponentSwizzle::eIdentity)
+                                         .setA(vk::ComponentSwizzle::eIdentity))
+                        .setSubresourceRange(vk::ImageSubresourceRange()
+                                               .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                                               .setBaseMipLevel(0)
+                                               .setLevelCount(1)
+                                               .setBaseArrayLayer(0)
+                                               .setLayerCount(1));
+
+    vk::ImageView imageView = m_device.createImageView(createinfo, nullptr);
+    if (!imageView) {
+        throw std::runtime_error("failed to create texture image view!");
+    }
+
+    return imageView;
+}
+
 /*
 The application we have now successfully draws a triangle, but there are some circumstances that
 it isn't handling properly yet. It is possible for the window surface to change such that the swap
@@ -2283,6 +2300,7 @@ renderer::cleanup()
     m_device.freeMemory(m_vertex_buffer_memory);
 
     // delete image and free up memory
+    m_device.destroyImageView(m_texture_image_view);
     m_device.destroyImage(m_texture_image);
     m_device.freeMemory(m_texture_image_memory);
 

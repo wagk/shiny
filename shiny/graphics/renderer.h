@@ -72,6 +72,7 @@ private:
     void createDescriptorSet();
 
     void createTextureImage();
+    void createTextureImageView();
 
     void createDescriptorSetLayout();
 
@@ -94,6 +95,8 @@ private:
                                vk::Format      format,
                                vk::ImageLayout oldLayout,
                                vk::ImageLayout newLayout) const;
+
+    vk::ImageView createImageView(vk::Image image, vk::Format format);
 
     template<typename Func>
     void executeSingleTimeCommands(Func func) const;
@@ -126,10 +129,6 @@ private:
     vk::PhysicalDevice         m_physical_device;
     vk::Device                 m_device;
 
-    // Image stuff
-    vk::Image        m_textureImage;
-    vk::DeviceMemory m_textureImageMemory;
-
     // swapchain things
     // TODO: Find a way to turn this back into a UniqueSwapchainKHR
     vk::SwapchainKHR             m_swapchain;
@@ -149,6 +148,7 @@ private:
     vk::DeviceMemory m_uniform_buffer_memory;
 
     vk::Image        m_texture_image;
+    vk::ImageView    m_texture_image_view;
     vk::DeviceMemory m_texture_image_memory;
 
     vk::ShaderModule m_vertex_shader_module;
