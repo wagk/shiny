@@ -13,7 +13,7 @@ using spirvbytecode = std::vector<char>;
 
 struct vertex
 {
-    glm::vec2 pos;
+    glm::vec3 pos;
     glm::vec3 color;
 
     static vk::VertexInputBindingDescription                  getBindingDescription();
@@ -73,6 +73,7 @@ private:
 
     void createTextureImage();
     void createTextureImageView();
+    void createTextureSampler();
 
     void createDescriptorSetLayout();
 
@@ -150,6 +151,7 @@ private:
     vk::Image        m_texture_image;
     vk::ImageView    m_texture_image_view;
     vk::DeviceMemory m_texture_image_memory;
+    vk::Sampler      m_texture_sampler;
 
     vk::ShaderModule m_vertex_shader_module;
     vk::ShaderModule m_fragment_shader_module;
