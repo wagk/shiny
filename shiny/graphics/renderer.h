@@ -13,7 +13,7 @@ using spirvbytecode = std::vector<char>;
 
 struct vertex
 {
-    glm::vec2 pos;
+    glm::vec3 pos;
     glm::vec3 color;
     glm::vec2 texcoord;
 
@@ -76,6 +76,8 @@ private:
     void createTextureImageView();
     void createTextureSampler();
 
+    void createDepthResources();
+
     void createDescriptorSetLayout();
 
     // helper functions
@@ -98,8 +100,28 @@ private:
                                vk::ImageLayout oldLayout,
                                vk::ImageLayout newLayout) const;
 
-    vk::ImageView createImageView(vk::Image image, vk::Format format);
+    vk::ImageView createImageView(vk::Image               image,
+                                  vk::Format              format,
+                                  vk::ImageAspectFlagBits aspectflags) const;
 
+    /* Find Format Helper Functions: Put them here due to their need for device reference */
+    vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates,
+                                   vk::ImageTiling                tiling,
+                                   vk::FormatFeatureFlagBits      features) const;
+    vk::Format findDepthFormat() const
+    {
+        return findSupportedFormat(
+          { vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint, vk::Format::eD24UnormS8Uint },
+          vk::ImageTiling::eOptimal, vk::FormatFeatureFlagBits::eDepthStencilAttachment);
+    }
+
+    bool hasStencilComponent(vk::Format format) const
+    {
+        return format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint;
+    }
+
+    /* Template function for use within unique SingleTimeCommand functions.
+     * It acts as a wrapper for BeginSingleTimeCommand and EndSingleTimeCommand. */
     template<typename Func>
     void executeSingleTimeCommands(Func func) const;
 
@@ -153,6 +175,10 @@ private:
     vk::ImageView    m_texture_image_view;
     vk::DeviceMemory m_texture_image_memory;
     vk::Sampler      m_texture_sampler;
+
+    vk::Image        m_depth_image;
+    vk::ImageView    m_depth_image_view;
+    vk::DeviceMemory m_depth_image_memory;
 
     vk::ShaderModule m_vertex_shader_module;
     vk::ShaderModule m_fragment_shader_module;
