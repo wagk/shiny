@@ -2435,6 +2435,7 @@ renderer::recreateSwapChain()
     createImageViews();
     createRenderPass();
     createGraphicsPipeline();
+    createDepthResources();
     createFramebuffers();
     createCommandBuffers();
 }
@@ -2445,6 +2446,10 @@ refer to renderer::recreateSwapChain()
 void
 renderer::cleanupSwapChain()
 {
+    m_device.destroyImageView(m_depth_image_view);
+    m_device.destroyImage(m_depth_image);
+    m_device.freeMemory(m_depth_image_memory);
+
     for (auto& framebuffer : m_swapchain_framebuffers) {
         m_device.destroyFramebuffer(framebuffer);
     }
