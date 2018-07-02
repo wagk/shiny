@@ -13,11 +13,12 @@ using spirvbytecode = std::vector<char>;
 
 struct vertex
 {
-    glm::vec3 pos;
+    glm::vec2 pos;
     glm::vec3 color;
+    glm::vec2 texcoord;
 
     static vk::VertexInputBindingDescription                  getBindingDescription();
-    static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescription();
+    static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescription();
 };
 
 /*

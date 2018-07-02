@@ -78,8 +78,8 @@ shadow map generation.
 
 namespace {
 
-const uint32_t WIDTH  = 800;
-const uint32_t HEIGHT = 600;
+const uint32_t WIDTH  = 1600;
+const uint32_t HEIGHT = 1200;
 
 using VulkanExtensionName = const char*;
 using VulkanLayerName     = const char*;
@@ -89,10 +89,10 @@ const std::vector<VulkanLayerName> validationLayers = { "VK_LAYER_LUNARG_standar
 const std::vector<VulkanExtensionName> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
 const std::vector<shiny::graphics::vertex> triangle_vertices = {
-    { { -0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
-    { { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
-    { { 0.5f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
-    { { -0.5f, 0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f } }
+    { { -0.5f, -0.5f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f } },
+    { { 0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f } },
+    { { 0.5f, 0.5f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f } },
+    { { -0.5f, 0.5f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } }
 };
 
 const std::vector<uint16_t> triangle_indices = { 0, 1, 2, 2, 3, 0 };
@@ -539,10 +539,11 @@ description struct describes how to extract a vertex attribute from a chunk of v
 originating from a binding description. We have two attributes, position and color, so we need two
 attribute description structs.
 */
-std::array<vk::VertexInputAttributeDescription, 2>
+std::array<vk::VertexInputAttributeDescription, 3>
 vertex::getAttributeDescription()
 {
     return {
+        /*Position Description*/
         vk::VertexInputAttributeDescription()
           // The binding parameter tells Vulkan from which binding the per-vertex data comes
           .setBinding(0)
@@ -571,11 +572,18 @@ vertex::getAttributeDescription()
           // The offset parameter specifies the number of bytes since the start of the per-vertex
           // data to read from.
           .setOffset(offsetof(vertex, pos)),
+        /*Color Description*/
         vk::VertexInputAttributeDescription()
           .setBinding(0)
           .setLocation(1)
           .setFormat(vk::Format::eR32G32B32Sfloat)
-          .setOffset(offsetof(vertex, color))
+          .setOffset(offsetof(vertex, color)),
+        /*TexCoord Description*/
+        vk::VertexInputAttributeDescription()
+          .setBinding(0)
+          .setLocation(2)
+          .setFormat(vk::Format::eR32G32Sfloat)
+          .setOffset(offsetof(vertex, texcoord))
     };
 }
 
@@ -1672,14 +1680,19 @@ The equivalent for descriptor sets is unsurprisingly called a descriptor pool.
 void
 renderer::createDescriptorPool()
 {
-    auto poolsize = vk::DescriptorPoolSize()
-                      // We only have a single descriptor right now with the uniform buffer type.
-                      .setDescriptorCount(1);
+    std::array<vk::DescriptorPoolSize, 2> poolsizes = {};
+    // We only have a single descriptor right now with the uniform buffer type.
+    poolsizes[0].setType(vk::DescriptorType::eUniformBuffer).setDescriptorCount(1);
+    poolsizes[1].setType(vk::DescriptorType::eCombinedImageSampler).setDescriptorCount(1);
 
-    auto poolinfo =
-      vk::DescriptorPoolCreateInfo().setPoolSizeCount(1).setPPoolSizes(&poolsize).setMaxSets(1);
+    auto poolinfo = vk::DescriptorPoolCreateInfo()
+                      .setPoolSizeCount(static_cast<uint32_t>(poolsizes.size()))
+                      .setPPoolSizes(poolsizes.data())
+                      .setMaxSets(1);
 
-    m_descriptor_pool = m_device.createDescriptorPool(poolinfo);
+    if (!(m_descriptor_pool = m_device.createDescriptorPool(poolinfo))) {
+        throw std::runtime_error("failed to create descriptor pool!");
+    }
 }
 
 /*
@@ -1700,6 +1713,8 @@ renderer::createDescriptorSet()
                        .setPSetLayouts(layouts.data());
 
     // NOTE: This returns a vector, not a single set
+    // NOTE: This call of allocateDescriptorSets causes an error message of a failure to allocate.
+    // Have to keep an eye on this to see if it goes away once the tutorial is done.
     m_descriptor_set = m_device.allocateDescriptorSets(allocinfo).front();
 
     // The descriptor set has been allocated now, but the descriptors within still need to be
@@ -1713,29 +1728,45 @@ renderer::createDescriptorSet()
                         // is is also possible to use the VK_WHOLE_SIZE value for the range.
                         .setRange(sizeof(uniformbufferobject));
 
+    // The final step is to bind the actual image and sampler resources to the descriptor in the
+    // descriptor set.
+    auto imageinfo = vk::DescriptorImageInfo()
+                       .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
+                       .setImageView(m_texture_image_view)
+                       .setSampler(m_texture_sampler);
+
     // The configuration of descriptors is updated using the vkUpdateDescriptorSets function, which
     // takes an array of VkWriteDescriptorSet structs as parameter.
-    auto writedescriptor =
-      vk::WriteDescriptorSet()
-        // The first two fields specify the descriptor set to update and the binding
-        .setDstSet(m_descriptor_set)
-        //  We gave our uniform buffer binding index 0
-        .setDstBinding(0)
-        // Remember that descriptors can be arrays, so we also need to specify the first index in
-        // the array that we want to update. We're not using an array, so the index is simply 0
-        .setDstArrayElement(0)
-        // We need to specify the type of descriptor again. It's possible to update multiple
-        // descriptors at once in an array, starting at index dstArrayElement
-        .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-        // The descriptorCount field specifies how many array elements you want to update.
-        .setDescriptorCount(1)
-        // The last field references an array with $descriptorCount structs that actually configure
-        // the descriptors. It depends on the type of descriptor which one of the three you actually
-        // need to use.
-        .setPBufferInfo(&bufferinfo);
+    std::array<vk::WriteDescriptorSet, 2> descriptorWrites = {};
+    descriptorWrites[0]
+      // The first two fields specify the descriptor set to update and the binding
+      .setDstSet(m_descriptor_set)
+      //  We gave our uniform buffer binding index 0
+      .setDstBinding(0)
+      // Remember that descriptors can be arrays, so we also need to specify the first index in
+      // the array that we want to update. We're not using an array, so the index is simply 0
+      .setDstArrayElement(0)
+      // We need to specify the type of descriptor again. It's possible to update multiple
+      // descriptors at once in an array, starting at index dstArrayElement
+      .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+      // The descriptorCount field specifies how many array elements you want to update.
+      .setDescriptorCount(1)
+      // The last field references an array with $descriptorCount structs that actually configure
+      // the descriptors. It depends on the type of descriptor which one of the three you actually
+      // need to use.
+      .setPBufferInfo(&bufferinfo);
+    descriptorWrites[1]
+      .setDstSet(m_descriptor_set)
+      .setDstBinding(1)
+      .setDstArrayElement(0)
+      .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+      .setDescriptorCount(1)
+      .setPImageInfo(&imageinfo);
 
-    // The nullptr is for a vk::CopyDescriptorSet
-    m_device.updateDescriptorSets(writedescriptor, nullptr);
+    // The 0 is for the number of copies, and nullptr is for a vk::CopyDescriptorSet
+    m_device.updateDescriptorSets(static_cast<uint32_t>(descriptorWrites.size()),
+                                  descriptorWrites.data(), 0, nullptr);
+    // m_device.updateDescriptorSets(descriptorWrites[1], nullptr);
 }
 
 /*
@@ -1951,22 +1982,35 @@ renderer::createDescriptorSetLayout()
         // The first two fields specify the `binding` used in the shader and
         // the type of descriptor, which is a uniform buffer object.
         .setBinding(0)
-        .setDescriptorType(vk::DescriptorType::eUniformBuffer)
         // It is possible for the shader variable to represent an array of uniform buffer objects,
         // and descriptorCount specifies the number of values in the array. This could be used to
         // specify a transformation for each of the bones in a skeleton for skeletal animation, for
         // example.
         .setDescriptorCount(1)
+        .setDescriptorType(vk::DescriptorType::eUniformBuffer)
         // We also need to specify in which shader stages the descriptor is going to be referenced.
         // The stageFlags field can be a combination of VkShaderStageFlagBits values or the value
         // VK_SHADER_STAGE_ALL_GRAPHICS. In our case, we're only referencing the descriptor from the
         // vertex shader.
         .setStageFlags(vk::ShaderStageFlagBits::eVertex);
 
-    auto layoutinfo =
-      vk::DescriptorSetLayoutCreateInfo().setBindingCount(1).setPBindings(&ubolayoutbinding);
+    auto samplerlayoutbinding = vk::DescriptorSetLayoutBinding()
+                                  .setBinding(1)
+                                  .setDescriptorCount(1)
+                                  .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                                  .setPImmutableSamplers(nullptr)
+                                  .setStageFlags(vk::ShaderStageFlagBits::eFragment);
 
-    m_descriptor_set_layout = m_device.createDescriptorSetLayout(layoutinfo);
+    std::array<vk::DescriptorSetLayoutBinding, 2> bindings = { ubolayoutbinding,
+                                                               samplerlayoutbinding };
+
+    auto layoutinfo = vk::DescriptorSetLayoutCreateInfo()
+                        .setBindingCount(static_cast<uint32_t>(bindings.size()))
+                        .setPBindings(bindings.data());
+
+    if (!(m_descriptor_set_layout = m_device.createDescriptorSetLayout(layoutinfo))) {
+        throw std::runtime_error("failed to create descriptor set layout1");
+    }
 }
 
 /*
@@ -2311,6 +2355,8 @@ renderer::initVulkan()
     createFramebuffers();
     createCommandPool();
     createTextureImage();
+    createTextureImageView();
+    createTextureSampler();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffer();
