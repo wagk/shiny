@@ -1822,6 +1822,19 @@ renderer::createTextureImage()
       createImage(width, height, vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
                   vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
                   vk::MemoryPropertyFlagBits::eDeviceLocal);
+    // Transition the texture image to VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+    transitionImageLayout(m_texture_image, vk::Format::eR8G8B8A8Unorm, vk::ImageLayout::eUndefined,
+                          vk::ImageLayout::eTransferDstOptimal);
+    // Execute the buffer to image copy operation
+    copyBufferToImage(stagingbuffer, m_texture_image, width, height);
+    // To be able to start sampling from the texture image in the shader, we need one last
+    // transition to prepare it for shader access
+    transitionImageLayout(m_texture_image, vk::Format::eR8G8B8A8Unorm,
+                          vk::ImageLayout::eTransferDstOptimal,
+                          vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    m_device.destroyBuffer(stagingbuffer, nullptr);
+    m_device.freeMemory(stagingbuffermemory, nullptr);
 }
 
 
@@ -2016,6 +2029,50 @@ renderer::createImage(uint32_t                width,
     return { image, memory };
 }
 
+void
+renderer::copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) const
+{
+    if (!buffer || !image)
+        return;
+
+    // Just like with buffer copies, you need to specify which part of the buffer is going to be
+    // copied to which part of the image. This happens through vk::BufferImageCopy structs:
+    // https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkBufferImageCopy.html
+    executeSingleTimeCommands([=](vk::CommandBuffer commandBuffer) {
+        vk::BufferImageCopy region;
+        // bufferOffset is the offset in bytes from the start of the buffer object where the image
+        // data is copied from or to.
+        region
+          .setBufferOffset(0)
+          // bufferRowLength and bufferImageHeight specify the data in buffer memory as a subregion
+          // of a larger two- or three-dimensional image, and control the addressing calculations of
+          // data in buffer memory. If either of these values is zero, that aspect of the buffer
+          // memory is considered to be tightly packed according to the imageExtent.
+          .setBufferImageHeight(0)
+          .setBufferRowLength(0)
+
+          // imageSubresource is a VkImageSubresourceLayers used to specify the specific image
+          // subresources of the image used for the source or destination image data.
+          .imageSubresource
+          // aspectMask is a combination of VkImageAspectFlagBits, selecting the color, depth and/or
+          // stencil aspects to be copied.
+          .setAspectMask(vk::ImageAspectFlagBits::eColor)
+          // mipLevel is the mipmap level to copy from.
+          .setMipLevel(0)
+          // baseArrayLayer and layerCount are the starting layer and number of layers to copy.
+          .setBaseArrayLayer(0)
+          .setLayerCount(1);
+        // imageOffset selects the initial x, y, z offsets in texels of the sub-region of the source
+        // or destination image data.
+        region.setImageOffset({ 0, 0, 0 });
+        // imageExtent is the size in texels of the image to copy in width, height and depth.
+        region.setImageExtent({ width, height, 1 });
+
+        commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal,
+                                        region);
+    });
+}
+
 /*
 Memory transfer operations are executed using command buffers, just like drawing commands. Therefore
 we must first allocate a temporary command buffer. You may wish to create a separate command pool
@@ -2032,6 +2089,78 @@ renderer::copyBuffer(vk::Buffer src, vk::Buffer* dst, vk::DeviceSize size) const
     executeSingleTimeCommands([=](vk::CommandBuffer& commandbuf) {
         auto copyregion = vk::BufferCopy().setSize(size);
         commandbuf.copyBuffer(src, *dst, 1, &copyregion);
+    });
+}
+
+void
+renderer::transitionImageLayout(vk::Image       image,
+                                vk::Format      format,
+                                vk::ImageLayout oldLayout,
+                                vk::ImageLayout newLayout) const
+{
+    if (!image) {
+        return;
+    }
+
+    // Begin lambda function
+    executeSingleTimeCommands([=](vk::CommandBuffer commandBuffer) {
+        // ImageMemoryBarrier struct with constructor argument descriptions in order of appearance.
+        // For in depth descriptions of the purposes of each one, go to this web address:
+        // https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkImageMemoryBarrier.html
+        // 1) srcAccessMask is a bitmask of VkAccessFlagBits specifying a source access mask.
+        // 2) dstAccessMask is a bitmask of VkAccessFlagBits specifying a destination access mask.
+        // 3) oldLayout is the old layout in an image layout transition.
+        // 4) newLayout is the new layout in an image layout transition.
+        // 5) srcQueueFamilyIndex is the source queue family for a queue family ownership transfer.
+        // 6) dstQueueFamilyIndex is the destination queue family for a queue family ownership
+        //    transfer.
+        // 7) image is a handle to the image affected by this barrier.
+        // 8) subresourceRange describes the image subresource range within image that is affected
+        //    by this barrier.
+        vk::ImageMemoryBarrier barrier(
+          vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eTransferRead,
+          vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eTransferSrcOptimal, 0, 0, image);
+        // Initial Barrier settings
+        barrier.setOldLayout(oldLayout)
+          .setNewLayout(newLayout)
+          .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+          .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+          .setImage(image)
+          // subresourceRange stuff, very similar to the Buffer to Image stuff
+          .subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor)
+          .setBaseMipLevel(0)
+          .setLevelCount(1)
+          .setBaseArrayLayer(0)
+          .setLayerCount(1);
+
+        vk::PipelineStageFlags sourceStage;
+        vk::PipelineStageFlags destStage;
+
+        // We perform layout checks in order to derive which transition we are making.
+        // For now, we are only considering two transitions:
+        // e.g.          oldLayout -> newLayout
+        // 1)            Undefined -> transfer destination
+        // 2) Transfer destination -> shader reading
+        // Later on, we can expand these condition checks, though I'm not sure how to make this more
+        // sophisticated. - <Jason>
+        if (oldLayout == vk::ImageLayout::eUndefined
+            && newLayout == vk::ImageLayout::eTransferDstOptimal) {
+            barrier.setSrcAccessMask(vk::AccessFlagBits());
+            barrier.setDstAccessMask(vk::AccessFlagBits::eTransferWrite);
+            sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+            destStage   = vk::PipelineStageFlagBits::eTransfer;
+        } else if (oldLayout == vk::ImageLayout::eTransferDstOptimal
+                   && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+            barrier.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite);
+            barrier.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+            sourceStage = vk::PipelineStageFlagBits::eTransfer;
+            destStage   = vk::PipelineStageFlagBits::eFragmentShader;
+        } else {
+            throw std::invalid_argument("Unsupported layout transition!");
+        }
+
+        commandBuffer.pipelineBarrier(sourceStage, destStage, vk::DependencyFlagBits::eByRegion,
+                                      (uint32_t)0, nullptr, (uint32_t)0, nullptr, 1, &barrier);
     });
 }
 
@@ -2121,6 +2250,12 @@ renderer::mainLoop()
 void
 renderer::cleanup()
 {
+    /*for (size_t i = 0; i < max_frames_in_flight; ++i) {
+        m_device.destroySemaphore(m_render_finished_semaphores[i], nullptr);
+        m_device.destroySemaphore(m_image_available_semaphores[i], nullptr);
+        m_device.destroyFence(m_in_flight_fences[i], nullptr);
+    }*/
+
     for (auto& fence : m_in_flight_fences) {
         m_device.destroyFence(fence);
     }
@@ -2135,28 +2270,24 @@ renderer::cleanup()
 
     cleanupSwapChain();
 
-    // delete image and free up memory
-    vkDestroyImage(m_device, m_textureImage, nullptr);
-    vkFreeMemory(m_device, m_textureImageMemory, nullptr);
-
     m_device.destroyDescriptorPool(m_descriptor_pool);
-
     m_device.destroyDescriptorSetLayout(m_descriptor_set_layout);
-
-    // command buffers are implicitly deleted when their command pool is deleted
-    m_device.destroyCommandPool(m_command_pool);
-
-    m_device.destroyBuffer(m_vertex_buffer);
-    m_device.freeMemory(m_vertex_buffer_memory);
-
-    m_device.destroyBuffer(m_index_buffer);
-    m_device.freeMemory(m_index_buffer_memory);
 
     m_device.destroyBuffer(m_uniform_buffer);
     m_device.freeMemory(m_uniform_buffer_memory);
 
+    m_device.destroyBuffer(m_index_buffer);
+    m_device.freeMemory(m_index_buffer_memory);
+
+    m_device.destroyBuffer(m_vertex_buffer);
+    m_device.freeMemory(m_vertex_buffer_memory);
+
+    // delete image and free up memory
     m_device.destroyImage(m_texture_image);
     m_device.freeMemory(m_texture_image_memory);
+
+    // command buffers are implicitly deleted when their command pool is deleted
+    m_device.destroyCommandPool(m_command_pool);
 
     m_device.destroyShaderModule(m_vertex_shader_module);
     m_device.destroyShaderModule(m_fragment_shader_module);
