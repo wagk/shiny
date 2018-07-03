@@ -78,8 +78,8 @@ shadow map generation.
 
 namespace {
 
-const uint32_t WIDTH  = 800;
-const uint32_t HEIGHT = 600;
+const uint32_t WIDTH  = 1600;
+const uint32_t HEIGHT = 1200;
 
 using VulkanExtensionName = const char*;
 using VulkanLayerName     = const char*;
@@ -89,10 +89,10 @@ const std::vector<VulkanLayerName> validationLayers = { "VK_LAYER_LUNARG_standar
 const std::vector<VulkanExtensionName> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
 const std::vector<shiny::graphics::vertex> triangle_vertices = {
-    { { -0.5f, -0.5f }, { 1.0f, 0.0f, 0.0f } },
-    { { 0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f } },
-    { { 0.5f, 0.5f }, { 0.0f, 0.0f, 1.0f } },
-    { { -0.5f, 0.5f }, { 1.0f, 1.0f, 1.0f } }
+    { { -0.5f, -0.5f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f } },
+    { { 0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f } },
+    { { 0.5f, 0.5f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f } },
+    { { -0.5f, 0.5f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } }
 };
 
 const std::vector<uint16_t> triangle_indices = { 0, 1, 2, 2, 3, 0 };
@@ -278,7 +278,13 @@ isDeviceSuitable(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface
         swapChainAdequate = !details.formats.empty() && !details.presentModes.empty();
     }
 
-    return extensionsSupported && queueFamilyComplete && swapChainAdequate;
+    /*The vkGetPhysicalDeviceFeatures repurposes the VkPhysicalDeviceFeatures struct to indicate
+     * which features are supported rather than requested by setting the boolean values.*/
+    vk::PhysicalDeviceFeatures supportedFeatures;
+    device.getFeatures(&supportedFeatures);
+
+    return extensionsSupported && queueFamilyComplete && swapChainAdequate
+           && supportedFeatures.samplerAnisotropy;
 }
 
 /*
@@ -533,10 +539,11 @@ description struct describes how to extract a vertex attribute from a chunk of v
 originating from a binding description. We have two attributes, position and color, so we need two
 attribute description structs.
 */
-std::array<vk::VertexInputAttributeDescription, 2>
+std::array<vk::VertexInputAttributeDescription, 3>
 vertex::getAttributeDescription()
 {
     return {
+        /*Position Description*/
         vk::VertexInputAttributeDescription()
           // The binding parameter tells Vulkan from which binding the per-vertex data comes
           .setBinding(0)
@@ -565,11 +572,18 @@ vertex::getAttributeDescription()
           // The offset parameter specifies the number of bytes since the start of the per-vertex
           // data to read from.
           .setOffset(offsetof(vertex, pos)),
+        /*Color Description*/
         vk::VertexInputAttributeDescription()
           .setBinding(0)
           .setLocation(1)
           .setFormat(vk::Format::eR32G32B32Sfloat)
-          .setOffset(offsetof(vertex, color))
+          .setOffset(offsetof(vertex, color)),
+        /*TexCoord Description*/
+        vk::VertexInputAttributeDescription()
+          .setBinding(0)
+          .setLocation(2)
+          .setFormat(vk::Format::eR32G32Sfloat)
+          .setOffset(offsetof(vertex, texcoord))
     };
 }
 
@@ -833,7 +847,7 @@ renderer::createLogicalDevice()
                                         .setPQueuePriorities(&queuepriority));
     }
 
-    auto devicefeatures = vk::PhysicalDeviceFeatures();
+    auto devicefeatures = vk::PhysicalDeviceFeatures().setSamplerAnisotropy(true);
 
     auto createinfo = vk::DeviceCreateInfo()
                         .setQueueCreateInfoCount((uint32_t)queuecreateinfos.size())
@@ -939,23 +953,7 @@ renderer::createImageViews()
     m_swapchain_image_views.reserve(m_swapchain_images.size());
 
     for (const vk::Image& image : m_swapchain_images) {
-        auto createinfo = vk::ImageViewCreateInfo()
-                            .setImage(image)
-                            .setViewType(vk::ImageViewType::e2D)
-                            .setFormat(m_swapchain_image_format)
-                            .setComponents(vk::ComponentMapping()
-                                             .setR(vk::ComponentSwizzle::eIdentity)
-                                             .setG(vk::ComponentSwizzle::eIdentity)
-                                             .setB(vk::ComponentSwizzle::eIdentity)
-                                             .setA(vk::ComponentSwizzle::eIdentity))
-                            .setSubresourceRange(vk::ImageSubresourceRange()
-                                                   .setAspectMask(vk::ImageAspectFlagBits::eColor)
-                                                   .setBaseMipLevel(0)
-                                                   .setLevelCount(1)
-                                                   .setBaseArrayLayer(0)
-                                                   .setLayerCount(1));
-
-        m_swapchain_image_views.emplace_back(m_device.createImageView(createinfo));
+        m_swapchain_image_views.emplace_back(createImageView(image, m_swapchain_image_format));
     }
 }
 
@@ -1682,14 +1680,19 @@ The equivalent for descriptor sets is unsurprisingly called a descriptor pool.
 void
 renderer::createDescriptorPool()
 {
-    auto poolsize = vk::DescriptorPoolSize()
-                      // We only have a single descriptor right now with the uniform buffer type.
-                      .setDescriptorCount(1);
+    std::array<vk::DescriptorPoolSize, 2> poolsizes = {};
+    // We only have a single descriptor right now with the uniform buffer type.
+    poolsizes[0].setType(vk::DescriptorType::eUniformBuffer).setDescriptorCount(1);
+    poolsizes[1].setType(vk::DescriptorType::eCombinedImageSampler).setDescriptorCount(1);
 
-    auto poolinfo =
-      vk::DescriptorPoolCreateInfo().setPoolSizeCount(1).setPPoolSizes(&poolsize).setMaxSets(1);
+    auto poolinfo = vk::DescriptorPoolCreateInfo()
+                      .setPoolSizeCount(static_cast<uint32_t>(poolsizes.size()))
+                      .setPPoolSizes(poolsizes.data())
+                      .setMaxSets(1);
 
-    m_descriptor_pool = m_device.createDescriptorPool(poolinfo);
+    if (!(m_descriptor_pool = m_device.createDescriptorPool(poolinfo))) {
+        throw std::runtime_error("failed to create descriptor pool!");
+    }
 }
 
 /*
@@ -1710,6 +1713,8 @@ renderer::createDescriptorSet()
                        .setPSetLayouts(layouts.data());
 
     // NOTE: This returns a vector, not a single set
+    // NOTE: This call of allocateDescriptorSets causes an error message of a failure to allocate.
+    // Have to keep an eye on this to see if it goes away once the tutorial is done.
     m_descriptor_set = m_device.allocateDescriptorSets(allocinfo).front();
 
     // The descriptor set has been allocated now, but the descriptors within still need to be
@@ -1723,29 +1728,45 @@ renderer::createDescriptorSet()
                         // is is also possible to use the VK_WHOLE_SIZE value for the range.
                         .setRange(sizeof(uniformbufferobject));
 
+    // The final step is to bind the actual image and sampler resources to the descriptor in the
+    // descriptor set.
+    auto imageinfo = vk::DescriptorImageInfo()
+                       .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
+                       .setImageView(m_texture_image_view)
+                       .setSampler(m_texture_sampler);
+
     // The configuration of descriptors is updated using the vkUpdateDescriptorSets function, which
     // takes an array of VkWriteDescriptorSet structs as parameter.
-    auto writedescriptor =
-      vk::WriteDescriptorSet()
-        // The first two fields specify the descriptor set to update and the binding
-        .setDstSet(m_descriptor_set)
-        //  We gave our uniform buffer binding index 0
-        .setDstBinding(0)
-        // Remember that descriptors can be arrays, so we also need to specify the first index in
-        // the array that we want to update. We're not using an array, so the index is simply 0
-        .setDstArrayElement(0)
-        // We need to specify the type of descriptor again. It's possible to update multiple
-        // descriptors at once in an array, starting at index dstArrayElement
-        .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-        // The descriptorCount field specifies how many array elements you want to update.
-        .setDescriptorCount(1)
-        // The last field references an array with $descriptorCount structs that actually configure
-        // the descriptors. It depends on the type of descriptor which one of the three you actually
-        // need to use.
-        .setPBufferInfo(&bufferinfo);
+    std::array<vk::WriteDescriptorSet, 2> descriptorWrites = {};
+    descriptorWrites[0]
+      // The first two fields specify the descriptor set to update and the binding
+      .setDstSet(m_descriptor_set)
+      //  We gave our uniform buffer binding index 0
+      .setDstBinding(0)
+      // Remember that descriptors can be arrays, so we also need to specify the first index in
+      // the array that we want to update. We're not using an array, so the index is simply 0
+      .setDstArrayElement(0)
+      // We need to specify the type of descriptor again. It's possible to update multiple
+      // descriptors at once in an array, starting at index dstArrayElement
+      .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+      // The descriptorCount field specifies how many array elements you want to update.
+      .setDescriptorCount(1)
+      // The last field references an array with $descriptorCount structs that actually configure
+      // the descriptors. It depends on the type of descriptor which one of the three you actually
+      // need to use.
+      .setPBufferInfo(&bufferinfo);
+    descriptorWrites[1]
+      .setDstSet(m_descriptor_set)
+      .setDstBinding(1)
+      .setDstArrayElement(0)
+      .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+      .setDescriptorCount(1)
+      .setPImageInfo(&imageinfo);
 
-    // The nullptr is for a vk::CopyDescriptorSet
-    m_device.updateDescriptorSets(writedescriptor, nullptr);
+    // The 0 is for the number of copies, and nullptr is for a vk::CopyDescriptorSet
+    m_device.updateDescriptorSets(static_cast<uint32_t>(descriptorWrites.size()),
+                                  descriptorWrites.data(), 0, nullptr);
+    // m_device.updateDescriptorSets(descriptorWrites[1], nullptr);
 }
 
 /*
@@ -1837,6 +1858,75 @@ renderer::createTextureImage()
     m_device.freeMemory(stagingbuffermemory, nullptr);
 }
 
+void
+renderer::createTextureImageView()
+{
+    m_texture_image_view = createImageView(m_texture_image, vk::Format::eR8G8B8A8Unorm);
+}
+
+void
+renderer::createTextureSampler()
+{
+    // Samplers are configured through a VkSamplerCreateInfo structure, which specifies all filters
+    // and transformations that it should apply.
+    vk::SamplerCreateInfo samplerInfo;
+    // The magFilter and minFilter fields specify how to interpolate texels that are magnified or
+    // minified. Magnification concerns the oversampling problem describes above, and minification
+    // concerns undersampling. The choices are VK_FILTER_NEAREST and VK_FILTER_LINEAR, corresponding
+    // to the modes demonstrated in the images above.
+    samplerInfo.setMagFilter(vk::Filter::eLinear)
+      .setMinFilter(vk::Filter::eLinear)
+      /*The addressing mode can be specified per axis using the addressMode fields. The available
+      values are listed below. Most of these are demonstrated in the image above. Note that the axes
+      are called U, V and W instead of X, Y and Z. This is a convention for texture space
+      coordinates.
+      ===VK_SAMPLER_ADDRESS_MODE_REPEAT: Repeat the texture when going beyond the image dimensions.
+      ===VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT: Like repeat, but inverts the coordinates to mirror
+      the image when going beyond the dimensions. VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE: Take the
+      color of the edge closest to the coordinate beyond the image dimensions.
+      ===VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE: Like clamp to edge, but instead uses the edge
+      opposite to the closest edge.
+      ===VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER: Return a solid color when sampling
+      beyond the dimensions of the image.
+      It doesn't really matter which addressing mode we use here,
+      because we're not going to sample outside of the image in this tutorial. However, the repeat
+      mode is probably the most common mode, because it can be used to tile textures like floors and
+      walls.*/
+      .setAddressModeU(vk::SamplerAddressMode::eRepeat)
+      .setAddressModeV(vk::SamplerAddressMode::eRepeat)
+      .setAddressModeW(vk::SamplerAddressMode::eRepeat)
+      /*These two fields specify if anisotropic filtering should be used. There is no reason not to
+         use this unless performance is a concern. The maxAnisotropy field limits the amount of
+         texel samples that can be used to calculate the final color. A lower value results in
+         better performance, but lower quality results. There is no graphics hardware available
+         today that will use more than 16 samples, because the difference is negligible beyond that
+         point.*/
+      // Side note by Jason: currently we only check if the physicaldevice is capable of anisotropy
+      // in the isDeviceSuitable() function. At some point we might be better off storing the
+      // physicalDeviceFeatures as a member value or scoping it here to set anisotropy settings
+      // correctly based on available features.
+      .setAnisotropyEnable(true)
+      .setMaxAnisotropy(16.0)
+      /*The borderColor field specifies which color is returned when sampling beyond the image with
+         clamp to border addressing mode. It is possible to return black, white or transparent in
+         either float or int formats. You cannot specify an arbitrary color.*/
+      .setBorderColor(vk::BorderColor::eFloatOpaqueBlack)
+      /*The unnormalizedCoordinates field specifies which coordinate system you want to use to
+        address texels in an image. If this field is VK_TRUE, then you can simply use coordinates
+        within the [0, texWidth) and [0, texHeight) range. If it is VK_FALSE, then the texels are
+        addressed using the [0, 1) range on all axes. Real-world applications almost always use
+        normalized coordinates, because then it's possible to use textures of varying resolutions
+        with the exact same coordinates.*/
+      .setUnnormalizedCoordinates(false)
+      .setCompareEnable(false)
+      .setCompareOp(vk::CompareOp::eAlways)
+      .setMipmapMode(vk::SamplerMipmapMode::eLinear);
+
+    if (!(m_texture_sampler = m_device.createSampler(samplerInfo))) {
+        throw std::runtime_error("failed to create tetxture sampler!");
+    }
+}
+
 
 /*
 This is practically the core loop. Here we update and load the uniform variables per frame.
@@ -1892,22 +1982,35 @@ renderer::createDescriptorSetLayout()
         // The first two fields specify the `binding` used in the shader and
         // the type of descriptor, which is a uniform buffer object.
         .setBinding(0)
-        .setDescriptorType(vk::DescriptorType::eUniformBuffer)
         // It is possible for the shader variable to represent an array of uniform buffer objects,
         // and descriptorCount specifies the number of values in the array. This could be used to
         // specify a transformation for each of the bones in a skeleton for skeletal animation, for
         // example.
         .setDescriptorCount(1)
+        .setDescriptorType(vk::DescriptorType::eUniformBuffer)
         // We also need to specify in which shader stages the descriptor is going to be referenced.
         // The stageFlags field can be a combination of VkShaderStageFlagBits values or the value
         // VK_SHADER_STAGE_ALL_GRAPHICS. In our case, we're only referencing the descriptor from the
         // vertex shader.
         .setStageFlags(vk::ShaderStageFlagBits::eVertex);
 
-    auto layoutinfo =
-      vk::DescriptorSetLayoutCreateInfo().setBindingCount(1).setPBindings(&ubolayoutbinding);
+    auto samplerlayoutbinding = vk::DescriptorSetLayoutBinding()
+                                  .setBinding(1)
+                                  .setDescriptorCount(1)
+                                  .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                                  .setPImmutableSamplers(nullptr)
+                                  .setStageFlags(vk::ShaderStageFlagBits::eFragment);
 
-    m_descriptor_set_layout = m_device.createDescriptorSetLayout(layoutinfo);
+    std::array<vk::DescriptorSetLayoutBinding, 2> bindings = { ubolayoutbinding,
+                                                               samplerlayoutbinding };
+
+    auto layoutinfo = vk::DescriptorSetLayoutCreateInfo()
+                        .setBindingCount(static_cast<uint32_t>(bindings.size()))
+                        .setPBindings(bindings.data());
+
+    if (!(m_descriptor_set_layout = m_device.createDescriptorSetLayout(layoutinfo))) {
+        throw std::runtime_error("failed to create descriptor set layout1");
+    }
 }
 
 /*
@@ -2164,6 +2267,33 @@ renderer::transitionImageLayout(vk::Image       image,
     });
 }
 
+vk::ImageView
+renderer::createImageView(vk::Image image, vk::Format format)
+{
+    auto createinfo = vk::ImageViewCreateInfo()
+                        .setImage(image)
+                        .setViewType(vk::ImageViewType::e2D)
+                        .setFormat(format)
+                        .setComponents(vk::ComponentMapping()
+                                         .setR(vk::ComponentSwizzle::eIdentity)
+                                         .setG(vk::ComponentSwizzle::eIdentity)
+                                         .setB(vk::ComponentSwizzle::eIdentity)
+                                         .setA(vk::ComponentSwizzle::eIdentity))
+                        .setSubresourceRange(vk::ImageSubresourceRange()
+                                               .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                                               .setBaseMipLevel(0)
+                                               .setLevelCount(1)
+                                               .setBaseArrayLayer(0)
+                                               .setLayerCount(1));
+
+    vk::ImageView imageView = m_device.createImageView(createinfo, nullptr);
+    if (!imageView) {
+        throw std::runtime_error("failed to create texture image view!");
+    }
+
+    return imageView;
+}
+
 /*
 The application we have now successfully draws a triangle, but there are some circumstances that
 it isn't handling properly yet. It is possible for the window surface to change such that the swap
@@ -2225,6 +2355,8 @@ renderer::initVulkan()
     createFramebuffers();
     createCommandPool();
     createTextureImage();
+    createTextureImageView();
+    createTextureSampler();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffer();
@@ -2282,7 +2414,9 @@ renderer::cleanup()
     m_device.destroyBuffer(m_vertex_buffer);
     m_device.freeMemory(m_vertex_buffer_memory);
 
-    // delete image and free up memory
+    // delete image and texture views and samplers
+    m_device.destroySampler(m_texture_sampler);
+    m_device.destroyImageView(m_texture_image_view);
     m_device.destroyImage(m_texture_image);
     m_device.freeMemory(m_texture_image_memory);
 
