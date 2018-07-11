@@ -11,7 +11,7 @@ namespace shiny::graphics {
 
 using spirvbytecode = std::vector<char>;
 
-struct vertex
+struct Vertex
 {
     glm::vec3 pos;
     glm::vec3 color;
@@ -19,6 +19,20 @@ struct vertex
 
     static vk::VertexInputBindingDescription                  getBindingDescription();
     static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescription();
+};
+
+struct Mesh
+{
+    Mesh() {}
+    Mesh(std::vector<Vertex> verticesIn, std::vector<uint32_t> indicesIn)
+    {
+        vertices = verticesIn;
+        indices  = indicesIn;
+    }
+    std::vector<Vertex>   vertices;
+    std::vector<uint32_t> indices;
+    vk::Buffer            vertex_buffer;
+    vk::DeviceMemory      vertex_buffer_memory;
 };
 
 /*
@@ -79,6 +93,12 @@ private:
     void createDepthResources();
 
     void createDescriptorSetLayout();
+
+    // Load functions
+    // Implementing some specific ones for now
+    void loadModels();  // Might eventually want to change this to accept a vector of strings
+                        // to load more than one file. This will be called from elsewhere.
+    Mesh loadObj(std::string objpath) const;
 
     // helper functions
     std::pair<vk::Buffer, vk::DeviceMemory> createBuffer(vk::DeviceSize          size,
@@ -203,6 +223,10 @@ private:
 
     vk::Queue m_graphics_queue;
     vk::Queue m_presentation_queue;
+
+    // Temporary model loading stuff for testing. Eventually these will become a cache of meshes and
+    // assets stored elsewhere.
+    Mesh m_mesh;
 };
 
 /*

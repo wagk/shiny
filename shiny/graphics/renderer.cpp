@@ -76,6 +76,9 @@ shadow map generation.
 #define STB_IMAGE_IMPLEMENTATION
 #include <include/stb_image.h>
 
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <include/tiny_obj_loader.h>
+
 #define UNREFERENCED_PARAMETER(P) (P)
 
 namespace {
@@ -90,7 +93,7 @@ const std::vector<VulkanLayerName> validationLayers = { "VK_LAYER_LUNARG_standar
 
 const std::vector<VulkanExtensionName> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
-const std::vector<shiny::graphics::vertex> triangle_vertices = {
+const std::vector<shiny::graphics::Vertex> triangle_vertices = {
     { { -0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f } },
     { { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f } },
     { { 0.5f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f } },
@@ -102,7 +105,9 @@ const std::vector<shiny::graphics::vertex> triangle_vertices = {
     { { -0.5f, 0.5f, -0.5f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } }
 };
 
-const std::vector<uint16_t> triangle_indices = { 0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4 };
+const std::vector<uint32_t> triangle_indices = { 0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4 };
+
+const shiny::graphics::Mesh triangle_mesh(triangle_vertices, triangle_indices);
 
 #ifdef NDEBUG
 constexpr const bool enableValidationLayers = false;
@@ -526,13 +531,13 @@ specifies the number of bytes between data entries and whether to move to the ne
 each vertex or after each instance.
 */
 vk::VertexInputBindingDescription
-vertex::getBindingDescription()
+Vertex::getBindingDescription()
 {
     return vk::VertexInputBindingDescription()
       //  The binding parameter specifies the index of the binding in the array of bindings.
       .setBinding(0)
       // The stride parameter specifies the number of bytes from one entry to the next
-      .setStride(sizeof(vertex))
+      .setStride(sizeof(Vertex))
       // the inputRate parameter can have one of the following values:
       // - VK_VERTEX_INPUT_RATE_VERTEX: Move to the next data entry after each vertex
       // - VK_VERTEX_INPUT_RATE_INSTANCE: Move to the next data entry after each instance
@@ -547,7 +552,7 @@ originating from a binding description. We have two attributes, position and col
 attribute description structs.
 */
 std::array<vk::VertexInputAttributeDescription, 3>
-vertex::getAttributeDescription()
+Vertex::getAttributeDescription()
 {
     return {
         /*Position Description*/
@@ -578,19 +583,19 @@ vertex::getAttributeDescription()
           .setFormat(vk::Format::eR32G32B32Sfloat)
           // The offset parameter specifies the number of bytes since the start of the per-vertex
           // data to read from.
-          .setOffset(offsetof(vertex, pos)),
+          .setOffset(offsetof(Vertex, pos)),
         /*Color Description*/
         vk::VertexInputAttributeDescription()
           .setBinding(0)
           .setLocation(1)
           .setFormat(vk::Format::eR32G32B32Sfloat)
-          .setOffset(offsetof(vertex, color)),
+          .setOffset(offsetof(Vertex, color)),
         /*TexCoord Description*/
         vk::VertexInputAttributeDescription()
           .setBinding(0)
           .setLocation(2)
           .setFormat(vk::Format::eR32G32Sfloat)
-          .setOffset(offsetof(vertex, texcoord))
+          .setOffset(offsetof(Vertex, texcoord))
     };
 }
 
@@ -1156,8 +1161,8 @@ renderer::createGraphicsPipeline()
     //    instancing)
     //  - Attribute descriptions: type of the attributes passed to the vertex shader,
     //    which binding to load them from and at which offset
-    auto bindingdescription    = vertex::getBindingDescription();
-    auto attributedescriptions = vertex::getAttributeDescription();
+    auto bindingdescription    = Vertex::getBindingDescription();
+    auto attributedescriptions = Vertex::getAttributeDescription();
 
     auto vertexinputinfo =
       vk::PipelineVertexInputStateCreateInfo()
@@ -1532,7 +1537,7 @@ renderer::createCommandBuffers()
                   std::vector<vk::DeviceSize> offsets       = { 0 };
 
                   command_buffer.bindVertexBuffers(0, 1, vertexbuffers.data(), offsets.data());
-                  command_buffer.bindIndexBuffer(m_index_buffer, 0, vk::IndexType::eUint16);
+                  command_buffer.bindIndexBuffer(m_index_buffer, 0, vk::IndexType::eUint32);
 
                   // Unlike vertex and index buffers, descriptor sets are not unique to graphics
                   // pipelines. Therefore we need to specify if we want to bind descriptor sets to
@@ -2093,6 +2098,44 @@ renderer::createDescriptorSetLayout()
     }
 }
 
+void
+renderer::loadModels()
+{
+    m_mesh = loadObj("models/chalet.obj");
+}
+
+Mesh
+renderer::loadObj(std::string objpath) const
+{
+    tinyobj::attrib_t                attrib;
+    std::vector<tinyobj::shape_t>    shapes;
+    std::vector<tinyobj::material_t> materials;
+    std::string                      err;
+
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, objpath.c_str())) {
+        throw std::runtime_error("failed to load Obj!");
+    }
+    Mesh objMesh;
+    for (const auto& shape : shapes) {
+        for (const auto& index : shape.mesh.indices) {
+            Vertex vertex = {};
+
+            vertex.pos = { attrib.vertices[3 * index.vertex_index + 0],
+                           attrib.vertices[3 * index.vertex_index + 1],
+                           attrib.vertices[3 * index.vertex_index + 2] };
+
+            vertex.texcoord = { attrib.texcoords[2 * index.texcoord_index + 0],
+                                1.0f - attrib.texcoords[2 * index.texcoord_index + 1] };
+
+            vertex.color = { 1.0f, 1.0f, 1.0f };
+
+            objMesh.vertices.push_back(vertex);
+            objMesh.indices.push_back(objMesh.indices.size());
+        }
+    }
+    return objMesh;
+}
+
 /*
 This is a helper function to create a buffer, allocate some memory for it, and bind them together
 */
@@ -2487,6 +2530,7 @@ renderer::initVulkan()
     createTextureImage();
     createTextureImageView();
     createTextureSampler();
+    // loadModels();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffer();
