@@ -65,6 +65,8 @@ shadow map generation.
 #include <set>
 #include <vector>
 
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -73,6 +75,9 @@ shadow map generation.
 // otherwise we'll get linking errors.
 #define STB_IMAGE_IMPLEMENTATION
 #include <include/stb_image.h>
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <include/tiny_obj_loader.h>
 
 #define UNREFERENCED_PARAMETER(P) (P)
 
@@ -88,14 +93,21 @@ const std::vector<VulkanLayerName> validationLayers = { "VK_LAYER_LUNARG_standar
 
 const std::vector<VulkanExtensionName> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
-const std::vector<shiny::graphics::vertex> triangle_vertices = {
-    { { -0.5f, -0.5f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f } },
-    { { 0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f } },
-    { { 0.5f, 0.5f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f } },
-    { { -0.5f, 0.5f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } }
+const std::vector<shiny::graphics::Vertex> triangle_vertices = {
+    { { -0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f } },
+    { { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f } },
+    { { 0.5f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f } },
+    { { -0.5f, 0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } },
+
+    { { -0.5f, -0.5f, -0.5f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f } },
+    { { 0.5f, -0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f } },
+    { { 0.5f, 0.5f, -0.5f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f } },
+    { { -0.5f, 0.5f, -0.5f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } }
 };
 
-const std::vector<uint16_t> triangle_indices = { 0, 1, 2, 2, 3, 0 };
+const std::vector<uint32_t> triangle_indices = { 0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4 };
+
+const shiny::graphics::Mesh triangle_mesh(triangle_vertices, triangle_indices);
 
 #ifdef NDEBUG
 constexpr const bool enableValidationLayers = false;
@@ -519,13 +531,13 @@ specifies the number of bytes between data entries and whether to move to the ne
 each vertex or after each instance.
 */
 vk::VertexInputBindingDescription
-vertex::getBindingDescription()
+Vertex::getBindingDescription()
 {
     return vk::VertexInputBindingDescription()
       //  The binding parameter specifies the index of the binding in the array of bindings.
       .setBinding(0)
       // The stride parameter specifies the number of bytes from one entry to the next
-      .setStride(sizeof(vertex))
+      .setStride(sizeof(Vertex))
       // the inputRate parameter can have one of the following values:
       // - VK_VERTEX_INPUT_RATE_VERTEX: Move to the next data entry after each vertex
       // - VK_VERTEX_INPUT_RATE_INSTANCE: Move to the next data entry after each instance
@@ -540,7 +552,7 @@ originating from a binding description. We have two attributes, position and col
 attribute description structs.
 */
 std::array<vk::VertexInputAttributeDescription, 3>
-vertex::getAttributeDescription()
+Vertex::getAttributeDescription()
 {
     return {
         /*Position Description*/
@@ -568,22 +580,22 @@ vertex::getAttributeDescription()
           //  - uvec4: VK_FORMAT_R32G32B32A32_UINT, a 4-component vector of 32-bit unsigned
           //  - integers double: VK_FORMAT_R64_SFLOAT, a double-precision (64-bit) float
           // The format parameter implicitly defines the byte size of attribute data
-          .setFormat(vk::Format::eR32G32Sfloat)
+          .setFormat(vk::Format::eR32G32B32Sfloat)
           // The offset parameter specifies the number of bytes since the start of the per-vertex
           // data to read from.
-          .setOffset(offsetof(vertex, pos)),
+          .setOffset(offsetof(Vertex, pos)),
         /*Color Description*/
         vk::VertexInputAttributeDescription()
           .setBinding(0)
           .setLocation(1)
           .setFormat(vk::Format::eR32G32B32Sfloat)
-          .setOffset(offsetof(vertex, color)),
+          .setOffset(offsetof(Vertex, color)),
         /*TexCoord Description*/
         vk::VertexInputAttributeDescription()
           .setBinding(0)
           .setLocation(2)
           .setFormat(vk::Format::eR32G32Sfloat)
-          .setOffset(offsetof(vertex, texcoord))
+          .setOffset(offsetof(Vertex, texcoord))
     };
 }
 
@@ -953,7 +965,8 @@ renderer::createImageViews()
     m_swapchain_image_views.reserve(m_swapchain_images.size());
 
     for (const vk::Image& image : m_swapchain_images) {
-        m_swapchain_image_views.emplace_back(createImageView(image, m_swapchain_image_format));
+        m_swapchain_image_views.emplace_back(
+          createImageView(image, m_swapchain_image_format, vk::ImageAspectFlagBits::eColor));
     }
 }
 
@@ -1001,6 +1014,24 @@ renderer::createRenderPass()
                                 // have during a subpass that uses this reference.
                                 .setLayout(vk::ImageLayout::eColorAttachmentOptimal);
 
+    /*The format should be the same as the depth image itself. This time we don't care about storing
+     * the depth data (storeOp), because it will not be used after drawing has finished. This may
+     * allow the hardware to perform additional optimizations. Just like the color buffer, we don't
+     * care about the previous depth contents, so we can use VK_IMAGE_LAYOUT_UNDEFINED as
+     * initialLayout.*/
+    auto depthattachment = vk::AttachmentDescription()
+                             .setFormat(findDepthFormat())
+                             .setSamples(vk::SampleCountFlagBits::e1)
+                             .setLoadOp(vk::AttachmentLoadOp::eClear)
+                             .setStoreOp(vk::AttachmentStoreOp::eDontCare)
+                             .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
+                             .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
+                             .setInitialLayout(vk::ImageLayout::eUndefined)
+                             .setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+
+    auto depthattachmentref = vk::AttachmentReference().setAttachment(1).setLayout(
+      vk::ImageLayout::eDepthStencilAttachmentOptimal);
+
     auto subpass = vk::SubpassDescription()
                      // Vulkan may also support compute subpasses in the future, so we have to be
                      // explicit about this being a graphics subpass.
@@ -1015,7 +1046,8 @@ renderer::createRenderPass()
                      // pDepthStencilAttachment: Attachments for depth and stencil data
                      // pPreserveAttachments: Attachments that are not used by this subpass, but for
                      // which the data must be preserved
-                     .setPColorAttachments(&colorattachmentref);
+                     .setPColorAttachments(&colorattachmentref)
+                     .setPDepthStencilAttachment(&depthattachmentref);
 
     // Remember that the subpasses in a render pass automatically take care of image layout
     // transitions. These transitions are controlled by subpass dependencies, which specify memory
@@ -1056,15 +1088,19 @@ renderer::createRenderPass()
         .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentRead
                           | vk::AccessFlagBits::eColorAttachmentWrite);
 
+    std::array<vk::AttachmentDescription, 2> attachments = { colorattachment, depthattachment };
+
     auto renderpasscreateinfo = vk::RenderPassCreateInfo()
-                                  .setAttachmentCount(1)
-                                  .setPAttachments(&colorattachment)
+                                  .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+                                  .setPAttachments(attachments.data())
                                   .setSubpassCount(1)
                                   .setPSubpasses(&subpass)
                                   .setDependencyCount(1)
                                   .setPDependencies(&subpassdependency);
 
-    m_render_pass = m_device.createRenderPass(renderpasscreateinfo);
+    if (!(m_render_pass = m_device.createRenderPass(renderpasscreateinfo))) {
+        throw std::runtime_error("failed to create render pass!");
+    }
 }
 
 /*
@@ -1125,8 +1161,8 @@ renderer::createGraphicsPipeline()
     //    instancing)
     //  - Attribute descriptions: type of the attributes passed to the vertex shader,
     //    which binding to load them from and at which offset
-    auto bindingdescription    = vertex::getBindingDescription();
-    auto attributedescriptions = vertex::getAttributeDescription();
+    auto bindingdescription    = Vertex::getBindingDescription();
+    auto attributedescriptions = Vertex::getAttributeDescription();
 
     auto vertexinputinfo =
       vk::PipelineVertexInputStateCreateInfo()
@@ -1215,6 +1251,26 @@ renderer::createGraphicsPipeline()
                            .setSampleShadingEnable(false)
                            .setRasterizationSamples(vk::SampleCountFlagBits::e1);
 
+    /*The depth attachment is ready to be used now, but depth testing still needs to be enabled in
+     * the graphics pipeline. It is configured through the VkPipelineDepthStencilStateCreateInfo
+     * struct:
+     * The depthTestEnable field specifies if the depth of new fragments should be compared to the
+     * depth buffer to see if they should be discarded. The depthWriteEnable field specifies if the
+     * new depth of fragments that pass the depth test should actually be written to the depth
+     * buffer. This is useful for drawing transparent objects. They should be compared to the
+     * previously rendered opaque objects, but not cause further away transparent objects to not be
+     * drawn.*/
+    auto depthstencil = vk::PipelineDepthStencilStateCreateInfo()
+                          .setDepthTestEnable(true)
+                          .setDepthWriteEnable(true)
+                          .setDepthCompareOp(vk::CompareOp::eLess)
+                          .setDepthBoundsTestEnable(false)
+                          .setMinDepthBounds(0.0f)  // optional for now
+                          .setMaxDepthBounds(1.0f)  // optional for now
+                          .setStencilTestEnable(false)
+                          .setFront(vk::StencilOpState())  // optional for now
+                          .setBack(vk::StencilOpState());  // optional for now
+
     // After a fragment shader has returned a color, it needs to be combined with the color that is
     // already in the framebuffer. This transformation is known as color blending and there are two
     // ways to do it:
@@ -1271,6 +1327,7 @@ renderer::createGraphicsPipeline()
         .setPRasterizationState(&rasterizer)
         .setPMultisampleState(&multisampling)
         .setPColorBlendState(&colorblending)
+        .setPDepthStencilState(&depthstencil)
         .setLayout(m_pipeline_layout)
         // And finally we have the reference to the render pass. It is also possible to use other
         // render passes with this pipeline instead of this specific instance, but they have to be
@@ -1301,13 +1358,15 @@ renderer::createFramebuffers()
     m_swapchain_framebuffers.reserve(m_swapchain_image_views.size());
 
     for (auto const& view : m_swapchain_image_views) {
+        std::array<vk::ImageView, 2> attachments = { view, m_depth_image_view };
+
         auto framebufferinfo = vk::FramebufferCreateInfo()
                                  .setRenderPass(m_render_pass)
                                  // The attachmentCount and pAttachments parameters specify the
                                  // VkImageView objects that should be bound to the respective
                                  // attachment descriptions in the render pass pAttachment array.
-                                 .setAttachmentCount(1)
-                                 .setPAttachments(&view)
+                                 .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+                                 .setPAttachments(attachments.data())
                                  .setWidth(m_swapchain_extent.width)
                                  .setHeight(m_swapchain_extent.height)
                                  // layers refers to the number of layers in image arrays. Our swap
@@ -1315,6 +1374,9 @@ renderer::createFramebuffers()
                                  .setLayers(1);
 
         auto framebuffer = m_device.createFramebuffer(framebufferinfo);
+        if (!framebuffer) {
+            throw std::runtime_error("failed to create framebuffer!");
+        }
         m_swapchain_framebuffers.emplace_back(framebuffer);
     }
 }
@@ -1423,8 +1485,15 @@ renderer::createCommandBuffers()
 
         recordCommandBuffer(command_buffer, begininfo, [=]() {
             auto const& framebuffer = m_swapchain_framebuffers[i];
-            auto        clearcolor  = vk::ClearValue(std::array<float, 4>{ 0.f, 0.f, 0.f, 1.f });
             auto        renderarea  = vk::Rect2D({ 0, 0 }, m_swapchain_extent);
+
+            /*The range of depths in the depth buffer is 0.0 to 1.0 in Vulkan, where 1.0 lies at the
+             * far view plane and 0.0 at the near view plane. The initial value at each point in the
+             * depth buffer should be the furthest possible depth, which is 1.0.*/
+            std::array<vk::ClearValue, 2> clearValues = {};
+            clearValues[0].setColor(
+              vk::ClearColorValue(std::array<float, 4>{ 0.0f, 0.0f, 0.0f, 1.0f }));
+            clearValues[1].setDepthStencil(vk::ClearDepthStencilValue(1.0f, 0));
 
             auto renderpassinfo =
               vk::RenderPassBeginInfo()
@@ -1440,8 +1509,8 @@ renderer::createCommandBuffers()
                 // The last two parameters define the clear values to use for
                 // VK_ATTACHMENT_LOAD_OP_CLEAR, which we used as load operation for the color
                 // attachment. I've defined the clear color to simply be black with 100% opacity.
-                .setClearValueCount(1)
-                .setPClearValues(&clearcolor);
+                .setClearValueCount(static_cast<uint32_t>(clearValues.size()))
+                .setPClearValues(clearValues.data());
 
             // The render pass can now begin. All of the functions that record commands can be
             // recognized by their vkCmd prefix. They all return void, so there will be no error
@@ -1468,7 +1537,7 @@ renderer::createCommandBuffers()
                   std::vector<vk::DeviceSize> offsets       = { 0 };
 
                   command_buffer.bindVertexBuffers(0, 1, vertexbuffers.data(), offsets.data());
-                  command_buffer.bindIndexBuffer(m_index_buffer, 0, vk::IndexType::eUint16);
+                  command_buffer.bindIndexBuffer(m_index_buffer, 0, vk::IndexType::eUint32);
 
                   // Unlike vertex and index buffers, descriptor sets are not unique to graphics
                   // pipelines. Therefore we need to specify if we want to bind descriptor sets to
@@ -1861,7 +1930,8 @@ renderer::createTextureImage()
 void
 renderer::createTextureImageView()
 {
-    m_texture_image_view = createImageView(m_texture_image, vk::Format::eR8G8B8A8Unorm);
+    m_texture_image_view =
+      createImageView(m_texture_image, vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor);
 }
 
 void
@@ -1927,6 +1997,21 @@ renderer::createTextureSampler()
     }
 }
 
+void
+renderer::createDepthResources()
+{
+    vk::Format depthFormat = findDepthFormat();
+
+    std::tie(m_depth_image, m_depth_image_memory) = createImage(
+      m_swapchain_extent.width, m_swapchain_extent.height, depthFormat, vk::ImageTiling::eOptimal,
+      vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
+    m_depth_image_view =
+      createImageView(m_depth_image, depthFormat, vk::ImageAspectFlagBits::eDepth);
+
+    transitionImageLayout(m_depth_image, depthFormat, vk::ImageLayout::eUndefined,
+                          vk::ImageLayout::eDepthStencilAttachmentOptimal);
+}
+
 
 /*
 This is practically the core loop. Here we update and load the uniform variables per frame.
@@ -1952,7 +2037,7 @@ renderer::updateUniformBuffer()
       glm::lookAt(glm::vec3(2.f, 2.f, 2.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 1.f));
     ubo.proj =
       glm::perspective(glm::radians(45.0f),
-                       m_swapchain_extent.width / (float)m_swapchain_extent.height, 0.1f, 10.0f);
+                       m_swapchain_extent.width / (float)m_swapchain_extent.height, 0.1f, 100.0f);
 
     // GLM was originally designed for OpenGL, where the Y coordinate of the clip coordinates is
     // inverted. The easiest way to compensate for that is to flip the sign on the scaling factor of
@@ -2011,6 +2096,44 @@ renderer::createDescriptorSetLayout()
     if (!(m_descriptor_set_layout = m_device.createDescriptorSetLayout(layoutinfo))) {
         throw std::runtime_error("failed to create descriptor set layout1");
     }
+}
+
+void
+renderer::loadModels()
+{
+    m_mesh = loadObj("models/chalet.obj");
+}
+
+Mesh
+renderer::loadObj(std::string objpath) const
+{
+    tinyobj::attrib_t                attrib;
+    std::vector<tinyobj::shape_t>    shapes;
+    std::vector<tinyobj::material_t> materials;
+    std::string                      err;
+
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, objpath.c_str())) {
+        throw std::runtime_error("failed to load Obj!");
+    }
+    Mesh objMesh;
+    for (const auto& shape : shapes) {
+        for (const auto& index : shape.mesh.indices) {
+            Vertex vertex = {};
+
+            vertex.pos = { attrib.vertices[3 * index.vertex_index + 0],
+                           attrib.vertices[3 * index.vertex_index + 1],
+                           attrib.vertices[3 * index.vertex_index + 2] };
+
+            vertex.texcoord = { attrib.texcoords[2 * index.texcoord_index + 0],
+                                1.0f - attrib.texcoords[2 * index.texcoord_index + 1] };
+
+            vertex.color = { 1.0f, 1.0f, 1.0f };
+
+            objMesh.vertices.push_back(vertex);
+            objMesh.indices.push_back(objMesh.indices.size());
+        }
+    }
+    return objMesh;
 }
 
 /*
@@ -2228,10 +2351,17 @@ renderer::transitionImageLayout(vk::Image       image,
           .setNewLayout(newLayout)
           .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
           .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-          .setImage(image)
-          // subresourceRange stuff, very similar to the Buffer to Image stuff
-          .subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor)
-          .setBaseMipLevel(0)
+          .setImage(image);
+        // subresourceRange stuff, very similar to the Buffer to Image stuff
+        if (newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+            barrier.subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eDepth);
+            if (hasStencilComponent(format)) {
+                barrier.subresourceRange.aspectMask |= vk::ImageAspectFlagBits::eStencil;
+            }
+        } else {
+            barrier.subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
+        }
+        barrier.subresourceRange.setBaseMipLevel(0)
           .setLevelCount(1)
           .setBaseArrayLayer(0)
           .setLayerCount(1);
@@ -2246,6 +2376,12 @@ renderer::transitionImageLayout(vk::Image       image,
         // 2) Transfer destination -> shader reading
         // Later on, we can expand these condition checks, though I'm not sure how to make this more
         // sophisticated. - <Jason>
+        /*The depth buffer will be read from to perform depth tests to see if a fragment is visible,
+         * and will be written to when a new fragment is drawn. The reading happens in the
+         * VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT stage and the writing in the
+         * VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT. You should pick the earliest pipeline stage
+         * that matches the specified operations, so that it is ready for usage as depth attachment
+         * when it needs to be.*/
         if (oldLayout == vk::ImageLayout::eUndefined
             && newLayout == vk::ImageLayout::eTransferDstOptimal) {
             barrier.setSrcAccessMask(vk::AccessFlagBits());
@@ -2258,6 +2394,13 @@ renderer::transitionImageLayout(vk::Image       image,
             barrier.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
             sourceStage = vk::PipelineStageFlagBits::eTransfer;
             destStage   = vk::PipelineStageFlagBits::eFragmentShader;
+        } else if (oldLayout == vk::ImageLayout::eUndefined
+                   && newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+            barrier.setSrcAccessMask(vk::AccessFlagBits());
+            barrier.setDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead
+                                     | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
+            sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+            destStage   = vk::PipelineStageFlagBits::eEarlyFragmentTests;
         } else {
             throw std::invalid_argument("Unsupported layout transition!");
         }
@@ -2268,7 +2411,9 @@ renderer::transitionImageLayout(vk::Image       image,
 }
 
 vk::ImageView
-renderer::createImageView(vk::Image image, vk::Format format)
+renderer::createImageView(vk::Image               image,
+                          vk::Format              format,
+                          vk::ImageAspectFlagBits aspectflags) const
 {
     auto createinfo = vk::ImageViewCreateInfo()
                         .setImage(image)
@@ -2280,7 +2425,7 @@ renderer::createImageView(vk::Image image, vk::Format format)
                                          .setB(vk::ComponentSwizzle::eIdentity)
                                          .setA(vk::ComponentSwizzle::eIdentity))
                         .setSubresourceRange(vk::ImageSubresourceRange()
-                                               .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                                               .setAspectMask(aspectflags)
                                                .setBaseMipLevel(0)
                                                .setLevelCount(1)
                                                .setBaseArrayLayer(0)
@@ -2292,6 +2437,28 @@ renderer::createImageView(vk::Image image, vk::Format format)
     }
 
     return imageView;
+}
+
+/* This function allows us to define our own list of prioritized formats, and will return the first
+ * successful find based on the list of candidates. */
+vk::Format
+renderer::findSupportedFormat(const std::vector<vk::Format>& candidates,
+                              vk::ImageTiling                tiling,
+                              vk::FormatFeatureFlagBits      features) const
+{
+    for (vk::Format format : candidates) {
+        vk::FormatProperties properties = m_physical_device.getFormatProperties(format);
+
+        if (tiling == vk::ImageTiling::eLinear
+            && (properties.linearTilingFeatures & features) == features) {
+            return format;
+        } else if (tiling == vk::ImageTiling::eOptimal
+                   && (properties.optimalTilingFeatures & features) == features) {
+            return format;
+        }
+    }
+
+    throw std::runtime_error("failed to find supported format!");
 }
 
 /*
@@ -2311,6 +2478,7 @@ renderer::recreateSwapChain()
     createImageViews();
     createRenderPass();
     createGraphicsPipeline();
+    createDepthResources();
     createFramebuffers();
     createCommandBuffers();
 }
@@ -2321,6 +2489,10 @@ refer to renderer::recreateSwapChain()
 void
 renderer::cleanupSwapChain()
 {
+    m_device.destroyImageView(m_depth_image_view);
+    m_device.destroyImage(m_depth_image);
+    m_device.freeMemory(m_depth_image_memory);
+
     for (auto& framebuffer : m_swapchain_framebuffers) {
         m_device.destroyFramebuffer(framebuffer);
     }
@@ -2352,11 +2524,13 @@ renderer::initVulkan()
     createRenderPass();
     createDescriptorSetLayout();
     createGraphicsPipeline();
-    createFramebuffers();
     createCommandPool();
+    createDepthResources();
+    createFramebuffers();
     createTextureImage();
     createTextureImageView();
     createTextureSampler();
+    // loadModels();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffer();
