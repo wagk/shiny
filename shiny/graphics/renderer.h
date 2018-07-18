@@ -29,10 +29,19 @@ struct Mesh
         vertices = verticesIn;
         indices  = indicesIn;
     }
+    void Destroy(vk::Device device)
+    {
+        device.destroyBuffer(vertex_buffer);
+        device.freeMemory(vertex_buffer_memory);
+        device.destroyBuffer(index_buffer);
+        device.freeMemory(index_buffer_memory);
+    }
     std::vector<Vertex>   vertices;
     std::vector<uint32_t> indices;
     vk::Buffer            vertex_buffer;
     vk::DeviceMemory      vertex_buffer_memory;
+    vk::Buffer            index_buffer;
+    vk::DeviceMemory      index_buffer_memory;
 };
 
 /*
@@ -78,9 +87,12 @@ private:
     void createSemaphores();
     void createFences();
 
-    void createVertexBuffer();
-    void createIndexBuffer();
+    void createVertexBuffer(Mesh& mesh);
+    void createIndexBuffer(Mesh& mesh);
     void createUniformBuffer();
+
+    void createVertexBuffers();
+    void createIndexBuffers();
 
     void updateUniformBuffer();
     void createDescriptorPool();
@@ -226,7 +238,12 @@ private:
 
     // Temporary model loading stuff for testing. Eventually these will become a cache of meshes and
     // assets stored elsewhere.
+
     Mesh m_mesh;
+    Mesh triangle_mesh;
+
+    // Map for storing loaded assets
+    std::vector<Mesh> m_mesh_cache;
 };
 
 /*
