@@ -24,6 +24,12 @@
     <ClCompile Include="graphics\renderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="include\OpenFBX\ofbx.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="include\OpenFBX\miniz.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\FreeImage.h">
@@ -483,6 +489,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="graphics\renderer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\OpenFBX\ofbx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\OpenFBX\miniz.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -7,6 +7,7 @@
 
 #include <glm/glm.hpp>
 
+
 namespace shiny::graphics {
 
 using spirvbytecode = std::vector<char>;
@@ -99,6 +100,8 @@ private:
     void loadModels();  // Might eventually want to change this to accept a vector of strings
                         // to load more than one file. This will be called from elsewhere.
     Mesh loadObj(std::string objpath) const;
+
+	Mesh loadFbx(std::string fbxpath) const;
 
     // helper functions
     std::pair<vk::Buffer, vk::DeviceMemory> createBuffer(vk::DeviceSize          size,

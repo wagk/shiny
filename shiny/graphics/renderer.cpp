@@ -79,12 +79,14 @@ shadow map generation.
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <include/tiny_obj_loader.h>
 
+#include <OpenFBX/ofbx.h>
+
 #define UNREFERENCED_PARAMETER(P) (P)
 
 namespace {
 
-const uint32_t WIDTH  = 1600;
-const uint32_t HEIGHT = 1200;
+const uint32_t WIDTH  = 1200;
+const uint32_t HEIGHT = 800;
 
 using VulkanExtensionName = const char*;
 using VulkanLayerName     = const char*;
@@ -92,6 +94,8 @@ using VulkanLayerName     = const char*;
 const std::vector<VulkanLayerName> validationLayers = { "VK_LAYER_LUNARG_standard_validation" };
 
 const std::vector<VulkanExtensionName> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+
+const std::array<float, 4> backgroundColor = { 0.033f, 0.111f, 0.124f, 1.0f };
 
 const std::vector<shiny::graphics::Vertex> triangle_vertices = {
     { { -0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f } },
@@ -1491,8 +1495,7 @@ renderer::createCommandBuffers()
              * far view plane and 0.0 at the near view plane. The initial value at each point in the
              * depth buffer should be the furthest possible depth, which is 1.0.*/
             std::array<vk::ClearValue, 2> clearValues = {};
-            clearValues[0].setColor(
-              vk::ClearColorValue(std::array<float, 4>{ 0.0f, 0.0f, 0.0f, 1.0f }));
+            clearValues[0].setColor(vk::ClearColorValue(backgroundColor));
             clearValues[1].setDepthStencil(vk::ClearDepthStencilValue(1.0f, 0));
 
             auto renderpassinfo =
@@ -2134,6 +2137,29 @@ renderer::loadObj(std::string objpath) const
         }
     }
     return objMesh;
+}
+
+Mesh
+renderer::loadFbx(std::string fbxpath) const
+{
+    FILE* fp;
+	fopen_s(&fp, fbxpath.c_str(), "rb");
+    if (!fp) {
+        throw std::runtime_error("failed to open fbx!");
+    }
+
+	fseek(fp, 0, SEEK_END);
+    long file_size = ftell(fp);
+	fseek(fp, 0, SEEK_CUR);
+    auto* content = new ofbx::u8[file_size];
+    fread(content, 1, file_size, fp);
+    ofbx::IScene* scene = ofbx::load((ofbx::u8*)content, file_size);
+    Mesh newMesh;
+	// call parseFBX function or something here to save to my struct
+	delete[] content;
+    fclose(fp);
+
+    return newMesh;
 }
 
 /*
