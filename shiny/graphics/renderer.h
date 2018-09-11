@@ -34,6 +34,8 @@ struct Mesh
     std::vector<uint32_t> indices;
     vk::Buffer            vertex_buffer;
     vk::DeviceMemory      vertex_buffer_memory;
+    vk::Buffer            index_buffer;
+    vk::DeviceMemory      index_buffer_memory;
 };
 
 /*
@@ -101,7 +103,7 @@ private:
                         // to load more than one file. This will be called from elsewhere.
     Mesh loadObj(std::string objpath) const;
 
-	Mesh loadFbx(std::string fbxpath) const;
+    Mesh loadFbx(std::string fbxpath) const;
 
     // helper functions
     std::pair<vk::Buffer, vk::DeviceMemory> createBuffer(vk::DeviceSize          size,

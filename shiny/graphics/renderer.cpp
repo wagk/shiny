@@ -1536,11 +1536,11 @@ renderer::createCommandBuffers()
                   command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
                                               m_graphics_pipeline);
 
-                  std::vector<vk::Buffer>     vertexbuffers = { m_vertex_buffer };
+                  std::vector<vk::Buffer>     vertexbuffers = { m_mesh.vertex_buffer };
                   std::vector<vk::DeviceSize> offsets       = { 0 };
 
                   command_buffer.bindVertexBuffers(0, 1, vertexbuffers.data(), offsets.data());
-                  command_buffer.bindIndexBuffer(m_index_buffer, 0, vk::IndexType::eUint32);
+                  command_buffer.bindIndexBuffer(m_mesh.index_buffer, 0, vk::IndexType::eUint32);
 
                   // Unlike vertex and index buffers, descriptor sets are not unique to graphics
                   // pipelines. Therefore we need to specify if we want to bind descriptor sets to
@@ -1577,7 +1577,7 @@ renderer::createCommandBuffers()
                   // graphics card to start reading at the second index. The second to last
                   // parameter specifies an offset to add to the indices in the index buffer. The
                   // final parameter specifies an offset for instancing, which we're not using.
-                  command_buffer.drawIndexed((uint32_t)triangle_indices.size(), 1, 0, 0, 0);
+                  command_buffer.drawIndexed((uint32_t)m_mesh.indices.size(), 1, 0, 0, 0);
               });
         });
     }
@@ -1647,8 +1647,7 @@ https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#vk
 void
 renderer::createVertexBuffer()
 {
-    vk::DeviceSize size =
-      sizeof(decltype(triangle_vertices)::value_type) * triangle_vertices.size();
+    vk::DeviceSize size = sizeof(decltype(m_mesh.vertices)::value_type) * m_mesh.vertices.size();
 
     // vk::Buffer       stagingbuffer;
     // vk::DeviceMemory stagingbuffermemory;
@@ -1677,18 +1676,18 @@ renderer::createVertexBuffer()
     // }
 
     withMappedMemory(stagingbuffermemory, 0, size,
-                     [=](void* data) { std::memcpy(data, triangle_vertices.data(), size); });
+                     [=](void* data) { std::memcpy(data, m_mesh.vertices.data(), size); });
 
     // The vertexBuffer is now allocated from a memory type that is device local, which generally
     // means that we're not able to use vkMapMemory. However, we can copy data from the
     // stagingBuffer to the vertexBuffer (using copyBuffer()). We have to indicate that we intend to
     // do that by specifying the transfer source flag for the stagingBuffer and the transfer
     // destination flag for the vertexBuffer, along with the vertex buffer usage flag.
-    std::tie(m_vertex_buffer, m_vertex_buffer_memory) = createBuffer(
+    std::tie(m_mesh.vertex_buffer, m_mesh.vertex_buffer_memory) = createBuffer(
       size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
       vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-    copyBuffer(stagingbuffer, &m_vertex_buffer, size);
+    copyBuffer(stagingbuffer, &m_mesh.vertex_buffer, size);
 
     m_device.destroyBuffer(stagingbuffer);
     m_device.freeMemory(stagingbuffermemory);
@@ -1702,7 +1701,7 @@ We do exactly the same thing we did for createVertexBuffer and do it for indices
 void
 renderer::createIndexBuffer()
 {
-    vk::DeviceSize size = sizeof(decltype(triangle_indices)::value_type) * triangle_indices.size();
+    vk::DeviceSize size = sizeof(decltype(m_mesh.indices)::value_type) * m_mesh.indices.size();
 
     // vk::Buffer       stagingbuffer;
     // vk::DeviceMemory stagingbuffermemory;
@@ -1718,13 +1717,13 @@ renderer::createIndexBuffer()
     // }
 
     withMappedMemory(stagingbuffermemory, 0, size,
-                     [=](void* data) { std::memcpy(data, triangle_indices.data(), size); });
+                     [=](void* data) { std::memcpy(data, m_mesh.indices.data(), size); });
 
-    std::tie(m_index_buffer, m_index_buffer_memory) = createBuffer(
+    std::tie(m_mesh.index_buffer, m_mesh.index_buffer_memory) = createBuffer(
       size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
       vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-    copyBuffer(stagingbuffer, &m_index_buffer, size);
+    copyBuffer(stagingbuffer, &m_mesh.index_buffer, size);
 
     m_device.destroyBuffer(stagingbuffer);
     m_device.freeMemory(stagingbuffermemory);
@@ -2104,7 +2103,8 @@ renderer::createDescriptorSetLayout()
 void
 renderer::loadModels()
 {
-    m_mesh = loadObj("models/chalet.obj");
+    m_mesh = Mesh(triangle_vertices, triangle_indices);
+    // m_mesh = loadObj("models/chalet.obj");
 }
 
 Mesh
@@ -2143,20 +2143,20 @@ Mesh
 renderer::loadFbx(std::string fbxpath) const
 {
     FILE* fp;
-	fopen_s(&fp, fbxpath.c_str(), "rb");
+    fopen_s(&fp, fbxpath.c_str(), "rb");
     if (!fp) {
         throw std::runtime_error("failed to open fbx!");
     }
 
-	fseek(fp, 0, SEEK_END);
+    fseek(fp, 0, SEEK_END);
     long file_size = ftell(fp);
-	fseek(fp, 0, SEEK_CUR);
+    fseek(fp, 0, SEEK_CUR);
     auto* content = new ofbx::u8[file_size];
     fread(content, 1, file_size, fp);
     ofbx::IScene* scene = ofbx::load((ofbx::u8*)content, file_size);
-    Mesh newMesh;
-	// call parseFBX function or something here to save to my struct
-	delete[] content;
+    Mesh          newMesh;
+    // call parseFBX function or something here to save to my struct
+    delete[] content;
     fclose(fp);
 
     return newMesh;
@@ -2556,7 +2556,7 @@ renderer::initVulkan()
     createTextureImage();
     createTextureImageView();
     createTextureSampler();
-    // loadModels();
+    loadModels();  // TODO: EVENTUALLY LOADS A LIST
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffer();
