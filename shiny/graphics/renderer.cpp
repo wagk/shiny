@@ -1890,7 +1890,7 @@ void
 renderer::createTextureImage()
 {
     int      width, height, channels;
-    stbi_uc* pixels = stbi_load("textures/texture.jpg", &width, &height, &channels, STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load("textures/chalet.jpg", &width, &height, &channels, STBI_rgb_alpha);
 
     if (!pixels) {
         throw std::runtime_error("Failed to load image!");
@@ -2103,8 +2103,8 @@ renderer::createDescriptorSetLayout()
 void
 renderer::loadModels()
 {
-    m_mesh = Mesh(triangle_vertices, triangle_indices);
-    // m_mesh = loadObj("models/chalet.obj");
+    // m_mesh = Mesh(triangle_vertices, triangle_indices);
+    m_mesh = loadObj("models/chalet.obj");
 }
 
 Mesh
