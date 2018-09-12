@@ -53,11 +53,14 @@ tessellation and geometry stages can be disabled if you are just drawing simple 
 only interested in depth values then you can disable the fragment shader stage, which is useful for
 shadow map generation.
 */
+#pragma once
+
 #include "graphics/renderer.h"
 
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -81,7 +84,13 @@ shadow map generation.
 
 #include <OpenFBX/ofbx.h>
 
+#include <assimp/Importer.hpp>
+#include <assimp/cimport.h>
+#include <assimp/postprocess.h>
+#include <assimp/scene.h>
+
 #define UNREFERENCED_PARAMETER(P) (P)
+
 
 namespace {
 
@@ -98,15 +107,15 @@ const std::vector<VulkanExtensionName> deviceExtensions = { VK_KHR_SWAPCHAIN_EXT
 const std::array<float, 4> backgroundColor = { 0.033f, 0.111f, 0.124f, 1.0f };
 
 const std::vector<shiny::graphics::Vertex> triangle_vertices = {
-    { { -0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f } },
-    { { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f } },
-    { { 0.5f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f } },
-    { { -0.5f, 0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } },
+    { { -0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f } },
+    { { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 0.0f } },
+    { { 0.5f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
+    { { -0.5f, 0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } },
 
-    { { -0.5f, -0.5f, -0.5f }, { 1.0f, 0.0f, 0.0f }, { 1.0f, 0.0f } },
-    { { 0.5f, -0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f } },
-    { { 0.5f, 0.5f, -0.5f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f } },
-    { { -0.5f, 0.5f, -0.5f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } }
+    { { -0.5f, -0.5f, -0.5f }, { 1.0f, 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f } },
+    { { 0.5f, -0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 0.0f } },
+    { { 0.5f, 0.5f, -0.5f }, { 0.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
+    { { -0.5f, 0.5f, -0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } }
 };
 
 const std::vector<uint32_t> triangle_indices = { 0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4 };
@@ -1536,6 +1545,17 @@ renderer::createCommandBuffers()
                   command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
                                               m_graphics_pipeline);
 
+                  /*
+                   * A couple steps here missing that I see in Sascha's Descriptor Sets example.
+                   * 1) Set viewport: VkViewport viewport =
+                   *vks::initializers::viewport((float)width, (float)height, 0.0f, 1.0f);
+                   *										   vkCmdSetViewport(drawCmdBuffers[i],
+                   *0, 1, &viewport); 2) Set Scissor: VkRect2D scissor =
+                   *vks::initializers::rect2D(width, height, 0, 0);
+                   *					vkCmdSetScissor(drawCmdBuffers[i], 0, 1,
+                   *&scissor);
+                   */
+
                   std::vector<vk::Buffer>     vertexbuffers = { m_mesh.vertex_buffer };
                   std::vector<vk::DeviceSize> offsets       = { 0 };
 
@@ -2034,9 +2054,9 @@ renderer::updateUniformBuffer()
       std::chrono::duration<float, std::chrono::seconds::period>(current_t - start_t).count();
 
     uniformbufferobject ubo;
-    ubo.model = glm::rotate(glm::mat4(1.f), time * glm::radians(90.f), glm::vec3(0.f, 0.f, 1.f));
+    ubo.model = glm::rotate(glm::mat4(1.f), time * glm::radians(45.f), glm::vec3(0.f, 0.f, 1.f));
     ubo.view =
-      glm::lookAt(glm::vec3(2.f, 2.f, 2.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 1.f));
+      glm::lookAt(glm::vec3(2.2f, 2.2f, 1.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 1.f));
     ubo.proj =
       glm::perspective(glm::radians(45.0f),
                        m_swapchain_extent.width / (float)m_swapchain_extent.height, 0.1f, 100.0f);
@@ -2103,8 +2123,14 @@ renderer::createDescriptorSetLayout()
 void
 renderer::loadModels()
 {
+    const aiScene* assimpthing =
+      aiImportFile("models/singleCubeScene.fbx", aiProcessPreset_TargetRealtime_MaxQuality);
+
     // m_mesh = Mesh(triangle_vertices, triangle_indices);
+    // Loading OBJ works! woohoo
     m_mesh = loadObj("models/chalet.obj");
+
+    Mesh fbxMesh = loadFbx("models/cube2017.fbx");
 }
 
 Mesh
@@ -2130,9 +2156,10 @@ renderer::loadObj(std::string objpath) const
             vertex.texcoord = { attrib.texcoords[2 * index.texcoord_index + 0],
                                 1.0f - attrib.texcoords[2 * index.texcoord_index + 1] };
 
-            vertex.color = { 1.0f, 1.0f, 1.0f };
+            vertex.color = { 1.0f, 1.0f, 1.0f, 1.0f };
 
             objMesh.vertices.push_back(vertex);
+            size_t sze = objMesh.indices.size();
             objMesh.indices.push_back(objMesh.indices.size());
         }
     }
@@ -2142,7 +2169,8 @@ renderer::loadObj(std::string objpath) const
 Mesh
 renderer::loadFbx(std::string fbxpath) const
 {
-    FILE* fp;
+    //#pragma warning(suppress : 4996)
+    FILE* fp;  //= fopen(fbxpath.c_str(), "rb");
     fopen_s(&fp, fbxpath.c_str(), "rb");
     if (!fp) {
         throw std::runtime_error("failed to open fbx!");
@@ -2154,8 +2182,76 @@ renderer::loadFbx(std::string fbxpath) const
     auto* content = new ofbx::u8[file_size];
     fread(content, 1, file_size, fp);
     ofbx::IScene* scene = ofbx::load((ofbx::u8*)content, file_size);
-    Mesh          newMesh;
+
+    if (scene == nullptr)
+        return Mesh();
+
     // call parseFBX function or something here to save to my struct
+    // TEMP HELPER FUNCTION LOCATION START
+    Mesh newMesh;
+    int  obj_idx        = 0;
+    int  indices_offset = 0;
+    int  normals_offset = 0;
+    // int  mesh_count     = scene->getMeshCount(); TODO: Uncomment this when we load more than the
+    // first mesh
+    int mesh_count = 1;
+
+    // This for loop isn't actually needed, it's for the eventuality
+    // that we load more than one Mesh from an fbx.
+    for (int i = 0; i < mesh_count; ++i) {
+        // Step 1: Fetch all relevant data fields from the parsed file
+        const ofbx::Mesh&     mesh         = *scene->getMesh(i);
+        const ofbx::Geometry& geom         = *mesh.getGeometry();
+        int                   vertex_count = geom.getVertexCount();
+        const ofbx::Vec3*     vertices     = geom.getVertices();
+        const ofbx::Vec4*     colors       = geom.getColors();
+        const ofbx::Vec3*     normals      = geom.getNormals();
+        const ofbx::Vec2*     uvs          = geom.getUVs();
+
+        // Step 2: Check availability of info, then set values.
+        for (int ii = 0; ii < vertex_count; ++ii) {
+            Vertex vertex;
+            // Set position of vertex
+            vertex.pos = glm::vec3(vertices[ii].x, vertices[ii].y, vertices[ii].z);
+            // Set color of vertex
+            if (colors == nullptr) {
+                vertex.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+            } else {
+                vertex.color = glm::vec4(colors[ii].x, colors[ii].y, colors[ii].z, colors[ii].w);
+            }
+            // Set normal of vertex
+            // Just adding the normals portion for posterity.
+            // We don't actually need it right now.
+            if (normals != nullptr) {
+                // newMesh.vertices[ii].normal = glm::vec3(normals[ii].x, normals[ii].y,
+                // normals[ii].z);
+            }
+            // Set uv of vertex
+            if (uvs != nullptr) {
+                vertex.texcoord = glm::vec2(uvs[ii].x, uvs[ii].y);
+            }
+
+            // I honestly have no idea how the indices work yet.
+            bool new_face = true;
+            int  count    = geom.getVertexCount();
+            for (int iii = 0; iii < count; ++iii) {
+                if (new_face) {
+                    new_face = false;
+                }
+                int idx        = i + 1;
+                int vertex_idx = indices_offset + idx;
+                new_face       = idx < 0;
+            }
+
+            indices_offset += vertex_count;
+            ++obj_idx;
+
+            // Save the vertex to Mesh
+            newMesh.vertices.push_back(vertex);
+        }
+    }
+    // TEMP HELPER FUNCTION LOCATION END
+
     delete[] content;
     fclose(fp);
 
@@ -2163,7 +2259,8 @@ renderer::loadFbx(std::string fbxpath) const
 }
 
 /*
-This is a helper function to create a buffer, allocate some memory for it, and bind them together
+This is a helper function to create a buffer, allocate some memory for it, and bind them
+together
 */
 std::pair<vk::Buffer, vk::DeviceMemory>
 renderer::createBuffer(vk::DeviceSize          size,
@@ -2172,27 +2269,30 @@ renderer::createBuffer(vk::DeviceSize          size,
 {
     auto bufferinfo =
       vk::BufferCreateInfo()
-        // The first field of the struct is size, which specifies the size of the buffer in bytes.
+        // The first field of the struct is size, which specifies the size of the buffer in
+        // bytes.
         .setSize(size)
-        // The second field is usage, which indicates for which purposes the data in the buffer is
-        // going to be used. It is possible to specify multiple purposes using a bitwise or. Our use
-        // case will be a vertex buffer
+        // The second field is usage, which indicates for which purposes the data in the buffer
+        // is going to be used. It is possible to specify multiple purposes using a bitwise or.
+        // Our use case will be a vertex buffer
         .setUsage(usage)
         // Just like the images in the swap chain, buffers can also be owned by a specific queue
-        // family or be shared between multiple at the same time. The buffer will only be used from
-        // the graphics queue, so we can stick to exclusive access.
+        // family or be shared between multiple at the same time. The buffer will only be used
+        // from the graphics queue, so we can stick to exclusive access.
         .setSharingMode(vk::SharingMode::eExclusive);
 
     auto buffer = m_device.createBuffer(bufferinfo);
 
-    // The buffer has been created, but it doesn't actually have any memory assigned to it yet. The
-    // first step of allocating memory for the buffer is to query its memory requirements using the
-    // aptly named vkGetBufferMemoryRequirements function.
+    // The buffer has been created, but it doesn't actually have any memory assigned to it yet.
+    // The first step of allocating memory for the buffer is to query its memory requirements
+    // using the aptly named vkGetBufferMemoryRequirements function.
     vk::MemoryRequirements memrequirements = m_device.getBufferMemoryRequirements(buffer);
 
     // The VkMemoryRequirements struct has three fields:
-    //  - size: The size of the required amount of memory in bytes, may differ from bufferInfo.size.
-    //  - alignment: The offset in bytes where the buffer begins in the allocated region of memory,
+    //  - size: The size of the required amount of memory in bytes, may differ from
+    //  bufferInfo.size.
+    //  - alignment: The offset in bytes where the buffer begins in the allocated region of
+    //  memory,
     // depends on bufferInfo.usage and bufferInfo.flags.
     //  - memoryTypeBits: Bit field of the memory types that are suitable for the buffer.
 
@@ -2203,10 +2303,10 @@ renderer::createBuffer(vk::DeviceSize          size,
 
     auto buffermemory = m_device.allocateMemory(memallocinfo);
 
-    // The first three parameters are self-explanatory and the fourth parameter is the offset within
-    // the region of memory. Since this memory is allocated specifically for this the vertex buffer,
-    // the offset is simply 0. If the offset is non-zero, then it is required to be divisible by
-    // memRequirements.alignment.
+    // The first three parameters are self-explanatory and the fourth parameter is the offset
+    // within the region of memory. Since this memory is allocated specifically for this the
+    // vertex buffer, the offset is simply 0. If the offset is non-zero, then it is required to
+    // be divisible by memRequirements.alignment.
     m_device.bindBufferMemory(buffer, buffermemory, 0);
 
     return { buffer, buffermemory };
@@ -2224,42 +2324,42 @@ renderer::createImage(uint32_t                width,
     auto imageinfo =
       vk::ImageCreateInfo()
         // The image type, specified in the imageType field, tells Vulkan with what kind of
-        // coordinate system the texels in the image are going to be addressed. It is possible to
-        // create 1D, 2D and 3D images. One dimensional images can be used to store an array of data
-        // or gradient, two dimensional images are mainly used for textures, and three dimensional
-        // images can be used to store voxel volumes, for example.
+        // coordinate system the texels in the image are going to be addressed. It is possible
+        // to create 1D, 2D and 3D images. One dimensional images can be used to store an array
+        // of data or gradient, two dimensional images are mainly used for textures, and three
+        // dimensional images can be used to store voxel volumes, for example.
         .setImageType(vk::ImageType::e2D)
-        //  The extent field specifies the dimensions of the image, basically how many texels there
-        //  are on each axis. That's why depth must be 1 instead of 0
+        //  The extent field specifies the dimensions of the image, basically how many texels
+        //  there are on each axis. That's why depth must be 1 instead of 0
         .setExtent(vk::Extent3D(width, height, 1))
         .setMipLevels(1)
         .setArrayLayers(1)
-        // Vulkan supports many possible image formats, but we should use the same format for the
-        // texels as the pixels in the buffer, otherwise the copy operation will fail.
+        // Vulkan supports many possible image formats, but we should use the same format for
+        // the texels as the pixels in the buffer, otherwise the copy operation will fail.
         .setFormat(format)
         // The tiling field can have one of two values:
-        //     VK_IMAGE_TILING_LINEAR: Texels are laid out in row-major order like our pixels array
-        //     VK_IMAGE_TILING_OPTIMAL: Texels are laid out in an implementation defined order for
-        //     optimal access
-        // Unlike the layout of an image, the tiling mode cannot be changed at a later time. If you
-        // want to be able to directly access texels in the memory of the image, then you must use
-        // VK_IMAGE_TILING_LINEAR. We will be using a staging buffer instead of a staging image, so
-        // this won't be necessary. We will be using VK_IMAGE_TILING_OPTIMAL for efficient access
-        // from the shader.
+        //     VK_IMAGE_TILING_LINEAR: Texels are laid out in row-major order like our pixels
+        //     array VK_IMAGE_TILING_OPTIMAL: Texels are laid out in an implementation defined
+        //     order for optimal access
+        // Unlike the layout of an image, the tiling mode cannot be changed at a later time. If
+        // you want to be able to directly access texels in the memory of the image, then you
+        // must use VK_IMAGE_TILING_LINEAR. We will be using a staging buffer instead of a
+        // staging image, so this won't be necessary. We will be using VK_IMAGE_TILING_OPTIMAL
+        // for efficient access from the shader.
         .setTiling(tiling)
         .setInitialLayout(vk::ImageLayout::eUndefined)
-        // The usage field has the same semantics as the one during buffer creation. The image is
-        // going to be used as destination for the buffer copy, so it should be set up as a transfer
-        // destination. We also want to be able to access the image from the shader to color our
-        // mesh, so the usage should include VK_IMAGE_USAGE_SAMPLED_BIT.
+        // The usage field has the same semantics as the one during buffer creation. The image
+        // is going to be used as destination for the buffer copy, so it should be set up as a
+        // transfer destination. We also want to be able to access the image from the shader to
+        // color our mesh, so the usage should include VK_IMAGE_USAGE_SAMPLED_BIT.
         .setUsage(usage)
-        // The samples flag is related to multisampling. This is only relevant for images that will
-        // be used as attachments, so stick to one sample. There are some optional flags for images
-        // that are related to sparse images. Sparse images are images where only certain regions
-        // are actually backed by memory. If you were using a 3D texture for a voxel terrain, for
-        // example, then you could use this to avoid allocating memory to store large volumes of
-        // "air" values. We won't be using it in this tutorial, so leave it to its default value of
-        // 0.
+        // The samples flag is related to multisampling. This is only relevant for images that
+        // will be used as attachments, so stick to one sample. There are some optional flags
+        // for images that are related to sparse images. Sparse images are images where only
+        // certain regions are actually backed by memory. If you were using a 3D texture for a
+        // voxel terrain, for example, then you could use this to avoid allocating memory to
+        // store large volumes of "air" values. We won't be using it in this tutorial, so leave
+        // it to its default value of 0.
         .setSamples(vk::SampleCountFlagBits::e1)
         // The image will only be used by one queue family: the one that supports graphics (and
         // therefore also) transfer operations.
@@ -2292,30 +2392,31 @@ renderer::copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint
     // https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkBufferImageCopy.html
     executeSingleTimeCommands([=](vk::CommandBuffer commandBuffer) {
         vk::BufferImageCopy region;
-        // bufferOffset is the offset in bytes from the start of the buffer object where the image
-        // data is copied from or to.
+        // bufferOffset is the offset in bytes from the start of the buffer object where the
+        // image data is copied from or to.
         region
           .setBufferOffset(0)
-          // bufferRowLength and bufferImageHeight specify the data in buffer memory as a subregion
-          // of a larger two- or three-dimensional image, and control the addressing calculations of
-          // data in buffer memory. If either of these values is zero, that aspect of the buffer
-          // memory is considered to be tightly packed according to the imageExtent.
+          // bufferRowLength and bufferImageHeight specify the data in buffer memory as a
+          // subregion of a larger two- or three-dimensional image, and control the addressing
+          // calculations of data in buffer memory. If either of these values is zero, that
+          // aspect of the buffer memory is considered to be tightly packed according to the
+          // imageExtent.
           .setBufferImageHeight(0)
           .setBufferRowLength(0)
 
           // imageSubresource is a VkImageSubresourceLayers used to specify the specific image
           // subresources of the image used for the source or destination image data.
           .imageSubresource
-          // aspectMask is a combination of VkImageAspectFlagBits, selecting the color, depth and/or
-          // stencil aspects to be copied.
+          // aspectMask is a combination of VkImageAspectFlagBits, selecting the color, depth
+          // and/or stencil aspects to be copied.
           .setAspectMask(vk::ImageAspectFlagBits::eColor)
           // mipLevel is the mipmap level to copy from.
           .setMipLevel(0)
           // baseArrayLayer and layerCount are the starting layer and number of layers to copy.
           .setBaseArrayLayer(0)
           .setLayerCount(1);
-        // imageOffset selects the initial x, y, z offsets in texels of the sub-region of the source
-        // or destination image data.
+        // imageOffset selects the initial x, y, z offsets in texels of the sub-region of the
+        // source or destination image data.
         region.setImageOffset({ 0, 0, 0 });
         // imageExtent is the size in texels of the image to copy in width, height and depth.
         region.setImageExtent({ width, height, 1 });
@@ -2326,11 +2427,11 @@ renderer::copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint
 }
 
 /*
-Memory transfer operations are executed using command buffers, just like drawing commands. Therefore
-we must first allocate a temporary command buffer. You may wish to create a separate command pool
-for these kinds of short-lived buffers, because the implementation may be able to apply memory
-allocation optimizations. You should use the VK_COMMAND_POOL_CREATE_TRANSIENT_BIT flag during
-command pool generation in that case.
+Memory transfer operations are executed using command buffers, just like drawing commands.
+Therefore we must first allocate a temporary command buffer. You may wish to create a separate
+command pool for these kinds of short-lived buffers, because the implementation may be able to
+apply memory allocation optimizations. You should use the VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
+flag during command pool generation in that case.
 */
 void
 renderer::copyBuffer(vk::Buffer src, vk::Buffer* dst, vk::DeviceSize size) const
@@ -2356,18 +2457,20 @@ renderer::transitionImageLayout(vk::Image       image,
 
     // Begin lambda function
     executeSingleTimeCommands([=](vk::CommandBuffer commandBuffer) {
-        // ImageMemoryBarrier struct with constructor argument descriptions in order of appearance.
-        // For in depth descriptions of the purposes of each one, go to this web address:
+        // ImageMemoryBarrier struct with constructor argument descriptions in order of
+        // appearance. For in depth descriptions of the purposes of each one, go to this web
+        // address:
         // https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkImageMemoryBarrier.html
         // 1) srcAccessMask is a bitmask of VkAccessFlagBits specifying a source access mask.
-        // 2) dstAccessMask is a bitmask of VkAccessFlagBits specifying a destination access mask.
-        // 3) oldLayout is the old layout in an image layout transition.
-        // 4) newLayout is the new layout in an image layout transition.
-        // 5) srcQueueFamilyIndex is the source queue family for a queue family ownership transfer.
-        // 6) dstQueueFamilyIndex is the destination queue family for a queue family ownership
+        // 2) dstAccessMask is a bitmask of VkAccessFlagBits specifying a destination access
+        // mask. 3) oldLayout is the old layout in an image layout transition. 4) newLayout is
+        // the new layout in an image layout transition. 5) srcQueueFamilyIndex is the source
+        // queue family for a queue family ownership transfer. 6) dstQueueFamilyIndex is the
+        // destination queue family for a queue family ownership
         //    transfer.
         // 7) image is a handle to the image affected by this barrier.
-        // 8) subresourceRange describes the image subresource range within image that is affected
+        // 8) subresourceRange describes the image subresource range within image that is
+        // affected
         //    by this barrier.
         vk::ImageMemoryBarrier barrier(
           vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eTransferRead,
@@ -2400,14 +2503,14 @@ renderer::transitionImageLayout(vk::Image       image,
         // e.g.          oldLayout -> newLayout
         // 1)            Undefined -> transfer destination
         // 2) Transfer destination -> shader reading
-        // Later on, we can expand these condition checks, though I'm not sure how to make this more
-        // sophisticated. - <Jason>
-        /*The depth buffer will be read from to perform depth tests to see if a fragment is visible,
-         * and will be written to when a new fragment is drawn. The reading happens in the
-         * VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT stage and the writing in the
-         * VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT. You should pick the earliest pipeline stage
-         * that matches the specified operations, so that it is ready for usage as depth attachment
-         * when it needs to be.*/
+        // Later on, we can expand these condition checks, though I'm not sure how to make this
+        // more sophisticated. - <Jason>
+        /*The depth buffer will be read from to perform depth tests to see if a fragment is
+         * visible, and will be written to when a new fragment is drawn. The reading happens in
+         * the VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT stage and the writing in the
+         * VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT. You should pick the earliest pipeline
+         * stage that matches the specified operations, so that it is ready for usage as depth
+         * attachment when it needs to be.*/
         if (oldLayout == vk::ImageLayout::eUndefined
             && newLayout == vk::ImageLayout::eTransferDstOptimal) {
             barrier.setSrcAccessMask(vk::AccessFlagBits());
@@ -2465,8 +2568,8 @@ renderer::createImageView(vk::Image               image,
     return imageView;
 }
 
-/* This function allows us to define our own list of prioritized formats, and will return the first
- * successful find based on the list of candidates. */
+/* This function allows us to define our own list of prioritized formats, and will return the
+ * first successful find based on the list of candidates. */
 vk::Format
 renderer::findSupportedFormat(const std::vector<vk::Format>& candidates,
                               vk::ImageTiling                tiling,
@@ -2489,9 +2592,9 @@ renderer::findSupportedFormat(const std::vector<vk::Format>& candidates,
 
 /*
 The application we have now successfully draws a triangle, but there are some circumstances that
-it isn't handling properly yet. It is possible for the window surface to change such that the swap
-chain is no longer compatible with it. One of the reasons that could cause this to happen is the
-size of the window changing. We have to catch these events and recreate the swap chain.
+it isn't handling properly yet. It is possible for the window surface to change such that the
+swap chain is no longer compatible with it. One of the reasons that could cause this to happen
+is the size of the window changing. We have to catch these events and recreate the swap chain.
 */
 void
 renderer::recreateSwapChain()
@@ -2608,11 +2711,11 @@ renderer::cleanup()
     m_device.destroyBuffer(m_uniform_buffer);
     m_device.freeMemory(m_uniform_buffer_memory);
 
-    m_device.destroyBuffer(m_index_buffer);
+    /*m_device.destroyBuffer(m_index_buffer);
     m_device.freeMemory(m_index_buffer_memory);
 
     m_device.destroyBuffer(m_vertex_buffer);
-    m_device.freeMemory(m_vertex_buffer_memory);
+    m_device.freeMemory(m_vertex_buffer_memory);*/
 
     // delete image and texture views and samplers
     m_device.destroySampler(m_texture_sampler);

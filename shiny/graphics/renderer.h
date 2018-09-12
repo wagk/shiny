@@ -15,7 +15,7 @@ using spirvbytecode = std::vector<char>;
 struct Vertex
 {
     glm::vec3 pos;
-    glm::vec3 color;
+    glm::vec4 color;
     glm::vec2 texcoord;
 
     static vk::VertexInputBindingDescription                  getBindingDescription();
@@ -187,11 +187,11 @@ private:
     vk::Extent2D                 m_swapchain_extent;
     std::vector<vk::Framebuffer> m_swapchain_framebuffers;
 
-    vk::Buffer       m_vertex_buffer;
+    /*vk::Buffer       m_vertex_buffer;
     vk::DeviceMemory m_vertex_buffer_memory;
 
     vk::Buffer       m_index_buffer;
-    vk::DeviceMemory m_index_buffer_memory;
+    vk::DeviceMemory m_index_buffer_memory;*/
 
     vk::Buffer       m_uniform_buffer;
     vk::DeviceMemory m_uniform_buffer_memory;
