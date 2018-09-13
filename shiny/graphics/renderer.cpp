@@ -122,6 +122,8 @@ const std::vector<uint32_t> triangle_indices = { 0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7
 
 const shiny::graphics::Mesh triangle_mesh(triangle_vertices, triangle_indices);
 
+const char* texture_filename = "textures/texture.jpg";
+
 #ifdef NDEBUG
 constexpr const bool enableValidationLayers = false;
 #else
@@ -1910,7 +1912,7 @@ void
 renderer::createTextureImage()
 {
     int      width, height, channels;
-    stbi_uc* pixels = stbi_load("textures/chalet.jpg", &width, &height, &channels, STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load(texture_filename, &width, &height, &channels, STBI_rgb_alpha);
 
     if (!pixels) {
         throw std::runtime_error("Failed to load image!");
@@ -2123,14 +2125,11 @@ renderer::createDescriptorSetLayout()
 void
 renderer::loadModels()
 {
-    const aiScene* assimpthing =
-      aiImportFile("models/singleCubeScene.fbx", aiProcessPreset_TargetRealtime_MaxQuality);
-
     // m_mesh = Mesh(triangle_vertices, triangle_indices);
     // Loading OBJ works! woohoo
-    m_mesh = loadObj("models/chalet.obj");
+    // m_mesh = loadObj("models/chalet.obj");
 
-    Mesh fbxMesh = loadFbx("models/cube2017.fbx");
+    m_mesh = loadFbx("models/singleCubeScene.fbx");
 }
 
 Mesh
@@ -2169,56 +2168,63 @@ renderer::loadObj(std::string objpath) const
 Mesh
 renderer::loadFbx(std::string fbxpath) const
 {
-    //#pragma warning(suppress : 4996)
-    FILE* fp;  //= fopen(fbxpath.c_str(), "rb");
-    fopen_s(&fp, fbxpath.c_str(), "rb");
-    if (!fp) {
+    const aiScene* pScene =
+      aiImportFile(fbxpath.c_str(), aiProcessPreset_TargetRealtime_MaxQuality);
+
+    if (!pScene) {
         throw std::runtime_error("failed to open fbx!");
     }
-
-    fseek(fp, 0, SEEK_END);
-    long file_size = ftell(fp);
-    fseek(fp, 0, SEEK_CUR);
-    auto* content = new ofbx::u8[file_size];
-    fread(content, 1, file_size, fp);
-    ofbx::IScene* scene = ofbx::load((ofbx::u8*)content, file_size);
-
-    if (scene == nullptr)
-        return Mesh();
 
     // call parseFBX function or something here to save to my struct
     // TEMP HELPER FUNCTION LOCATION START
     Mesh newMesh;
-    int  obj_idx        = 0;
-    int  indices_offset = 0;
-    int  normals_offset = 0;
-    // int  mesh_count     = scene->getMeshCount(); TODO: Uncomment this when we load more than the
+
+    std::vector<float>    vertexBuffer;
+    std::vector<uint32_t> indexBuffer;
+
+    // int  mesh_count     = pScene->mNumMeshes; TODO: Uncomment this when we load more than the
     // first mesh
-    int mesh_count = 1;
+    int meshCount   = 1;
+    int vertexCount = 0;
+    int indexCount  = 0;
 
     // This for loop isn't actually needed, it's for the eventuality
     // that we load more than one Mesh from an fbx.
-    for (int i = 0; i < mesh_count; ++i) {
+    for (int i = 0; i < meshCount; ++i) {
         // Step 1: Fetch all relevant data fields from the parsed file
-        const ofbx::Mesh&     mesh         = *scene->getMesh(i);
+        /*const ofbx::Mesh&     mesh         = *scene->getMesh(i);
         const ofbx::Geometry& geom         = *mesh.getGeometry();
         int                   vertex_count = geom.getVertexCount();
         const ofbx::Vec3*     vertices     = geom.getVertices();
         const ofbx::Vec4*     colors       = geom.getColors();
         const ofbx::Vec3*     normals      = geom.getNormals();
-        const ofbx::Vec2*     uvs          = geom.getUVs();
+        const ofbx::Vec2*     uvs          = geom.getUVs();*/
+
+        const aiMesh* pMesh = pScene->mMeshes[i];
+        vertexCount += pMesh->mNumVertices;
+
+        auto vertices = pMesh->mVertices;
+        // auto colors   = pMesh->mColors;
+        auto normals = pMesh->mNormals;
+
+        aiColor3D pColor(0.f, 0.f, 0.f);
+        pScene->mMaterials[pMesh->mMaterialIndex]->Get(AI_MATKEY_COLOR_DIFFUSE, pColor);
+
+        const aiVector3D Zero3D(0.0f, 0.0f, 0.0f);
 
         // Step 2: Check availability of info, then set values.
-        for (int ii = 0; ii < vertex_count; ++ii) {
+        for (int ii = 0; ii < vertexCount; ++ii) {
             Vertex vertex;
             // Set position of vertex
             vertex.pos = glm::vec3(vertices[ii].x, vertices[ii].y, vertices[ii].z);
             // Set color of vertex
-            if (colors == nullptr) {
+            vertex.color = glm::vec4(pColor.r, pColor.g, pColor.b, 1.0f);
+            /*if (pColor == nullptr) {
                 vertex.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
             } else {
-                vertex.color = glm::vec4(colors[ii].x, colors[ii].y, colors[ii].z, colors[ii].w);
-            }
+                vertex.color = glm::vec4(pColor.r, pColor.g, pColor.b, 1.0f);
+            }*/
+
             // Set normal of vertex
             // Just adding the normals portion for posterity.
             // We don't actually need it right now.
@@ -2227,33 +2233,28 @@ renderer::loadFbx(std::string fbxpath) const
                 // normals[ii].z);
             }
             // Set uv of vertex
+            auto uvs = (pMesh->HasTextureCoords(0)) ? &(pMesh->mTextureCoords[0][ii]) : &Zero3D;
             if (uvs != nullptr) {
-                vertex.texcoord = glm::vec2(uvs[ii].x, uvs[ii].y);
+                vertex.texcoord = glm::vec2(uvs->x, uvs->y);
             }
-
-            // I honestly have no idea how the indices work yet.
-            bool new_face = true;
-            int  count    = geom.getVertexCount();
-            for (int iii = 0; iii < count; ++iii) {
-                if (new_face) {
-                    new_face = false;
-                }
-                int idx        = i + 1;
-                int vertex_idx = indices_offset + idx;
-                new_face       = idx < 0;
-            }
-
-            indices_offset += vertex_count;
-            ++obj_idx;
 
             // Save the vertex to Mesh
             newMesh.vertices.push_back(vertex);
         }
+
+        uint32_t indexBase = static_cast<uint32_t>(newMesh.indices.size());
+        for (unsigned int ii = 0; ii < pMesh->mNumFaces; ++ii) {
+            const aiFace& Face = pMesh->mFaces[ii];
+            if (Face.mNumIndices != 3) {
+                continue;
+            }
+            newMesh.indices.push_back(indexBase + Face.mIndices[0]);
+            newMesh.indices.push_back(indexBase + Face.mIndices[1]);
+            newMesh.indices.push_back(indexBase + Face.mIndices[2]);
+            indexCount += 3;
+        }
     }
     // TEMP HELPER FUNCTION LOCATION END
-
-    delete[] content;
-    fclose(fp);
 
     return newMesh;
 }
