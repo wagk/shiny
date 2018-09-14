@@ -122,7 +122,8 @@ const std::vector<uint32_t> triangle_indices = { 0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7
 
 const shiny::graphics::Mesh triangle_mesh(triangle_vertices, triangle_indices);
 
-const char* texture_filename = "textures/texture.jpg";
+const char* texture_filename = "textures/Imrod_Diffuse.png";
+const char* model_filename   = "models/imrod.fbx";
 
 #ifdef NDEBUG
 constexpr const bool enableValidationLayers = false;
@@ -2056,9 +2057,9 @@ renderer::updateUniformBuffer()
       std::chrono::duration<float, std::chrono::seconds::period>(current_t - start_t).count();
 
     uniformbufferobject ubo;
-    ubo.model = glm::rotate(glm::mat4(1.f), time * glm::radians(45.f), glm::vec3(0.f, 0.f, 1.f));
+    ubo.model = glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f, 0.f));
     ubo.view =
-      glm::lookAt(glm::vec3(2.2f, 2.2f, 1.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 1.f));
+      glm::lookAt(glm::vec3(6.f, 5.f, 0.f), glm::vec3(0.f, 3.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
     ubo.proj =
       glm::perspective(glm::radians(45.0f),
                        m_swapchain_extent.width / (float)m_swapchain_extent.height, 0.1f, 100.0f);
@@ -2129,7 +2130,7 @@ renderer::loadModels()
     // Loading OBJ works! woohoo
     // m_mesh = loadObj("models/chalet.obj");
 
-    m_mesh = loadFbx("models/singleCubeScene.fbx");
+    m_mesh = loadFbx(model_filename);
 }
 
 Mesh
@@ -2235,7 +2236,9 @@ renderer::loadFbx(std::string fbxpath) const
             // Set uv of vertex
             auto uvs = (pMesh->HasTextureCoords(0)) ? &(pMesh->mTextureCoords[0][ii]) : &Zero3D;
             if (uvs != nullptr) {
-                vertex.texcoord = glm::vec2(uvs->x, uvs->y);
+                // We flip the Y coord because Vulkan origin is in the Top-Left, while Maya is
+                // Bottom-Left
+                vertex.texcoord = glm::vec2(uvs->x, -uvs->y);
             }
 
             // Save the vertex to Mesh
