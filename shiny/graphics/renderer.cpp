@@ -1777,18 +1777,16 @@ Much like vertex and index buffers, we have a buffer for uniform values
 void
 renderer::createUniformBuffer()
 {
-    vk::DeviceSize buffersize = sizeof(uniformbufferobject);
+    // vk::DeviceSize buffersize = sizeof(uniformbufferobject);
 
     std::tie(m_uniform_buffer, m_uniform_buffer_memory) = createBuffer(
-      buffersize, vk::BufferUsageFlagBits::eUniformBuffer,
+      sizeof(uniformbufferobject), vk::BufferUsageFlagBits::eUniformBuffer,
       vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
 
     for (auto& mesh : m_meshes) {
-        vk::DeviceSize buffersize = sizeof(mesh.matrices);
-
         std::tie(mesh.uniform_buffer, mesh.uniform_buffer_memory) = createBuffer(
-          buffersize, vk::BufferUsageFlagBits::eUniformBuffer,
+          sizeof(mesh.matrices), vk::BufferUsageFlagBits::eUniformBuffer,
           vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
     }
 }
@@ -2102,7 +2100,7 @@ renderer::updateUniformBuffer()
       std::chrono::duration<float, std::chrono::seconds::period>(current_t - start_t).count();
 
     uniformbufferobject ubo;
-    ubo.model = glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f, 0.f));
+    // ubo.model = glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f, 0.f));
     ubo.view =
       glm::lookAt(glm::vec3(6.f, 5.f, 0.f), glm::vec3(0.f, 3.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
     ubo.proj =
@@ -2120,7 +2118,7 @@ renderer::updateUniformBuffer()
 
     // Update the meshes
     m_meshes[0].matrices.model = glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.0f, 0.0f));
-    m_meshes[1].matrices.model = glm::translate(glm::mat4(1.0f), glm::vec3(1.5f, 0.5f, 0.0f));
+    m_meshes[1].matrices.model = glm::translate(glm::mat4(1.0f), glm::vec3(3.5f, 0.5f, 0.0f));
 
     for (auto& mesh : m_meshes) {
         mesh.matrices.proj = ubo.proj;
@@ -2130,12 +2128,6 @@ renderer::updateUniformBuffer()
             std::memcpy(data, &mesh.matrices, sizeof(mesh.matrices));
         });
     }
-
-    // {
-    //     void* data = m_device.mapMemory(m_uniform_buffer_memory, 0, sizeof(ubo));
-    //     std::memcpy(data, &ubo, sizeof(ubo));
-    //     m_device.unmapMemory(m_uniform_buffer_memory);
-    // }
 }
 
 /*
