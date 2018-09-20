@@ -14,6 +14,18 @@ namespace shiny::graphics {
 
 using spirvbytecode = std::vector<char>;
 
+/*
+We can exactly match the definition in the shader using data types in GLM. The data in the matrices
+is binary compatible with the way the shader expects it, so we can later just memcpy a
+UniformBufferObject to a VkBuffer.
+*/
+struct uniformbufferobject
+{
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 proj;
+};
+
 struct Vertex
 {
     glm::vec3 pos;
@@ -32,27 +44,32 @@ struct Mesh
         vertices = verticesIn;
         indices  = indicesIn;
     }
-    std::vector<Vertex>   vertices;
-    std::vector<uint32_t> indices;
-    vk::Buffer            vertex_buffer;
-    vk::Buffer            index_buffer;
-    vk::DeviceMemory      vertex_buffer_memory;
-    vk::DeviceMemory      index_buffer_memory;
-    Texture2D             texture;
-    std::string           texture_filename;
+    uniformbufferobject      matrices;
+    vk::Device*              device;
+    std::vector<Vertex>      vertices;
+    std::vector<uint32_t>    indices;
+    vk::Buffer               vertex_buffer;
+    vk::Buffer               index_buffer;
+    vk::DeviceMemory         vertex_buffer_memory;
+    vk::DeviceMemory         index_buffer_memory;
+    vk::DescriptorSet        descriptor_set;
+    vk::DescriptorBufferInfo buffer_info;
+    Texture2D                texture;
+    vk::Buffer               uniform_buffer;
+    glm::vec3                rotation;
+    std::string              texture_filename;
+
+    void destroy(const vk::Device& device)
+    {
+        device.destroyBuffer(index_buffer);
+        device.freeMemory(index_buffer_memory);
+        device.destroyBuffer(vertex_buffer);
+        device.freeMemory(vertex_buffer_memory);
+        // delete image and texture views and samplers
+        texture.destroy(device);
+    }
 };
 
-/*
-We can exactly match the definition in the shader using data types in GLM. The data in the matrices
-is binary compatible with the way the shader expects it, so we can later just memcpy a
-UniformBufferObject to a VkBuffer.
-*/
-struct uniformbufferobject
-{
-    glm::mat4 model;
-    glm::mat4 view;
-    glm::mat4 proj;
-};
 
 class renderer
 {
@@ -93,9 +110,10 @@ private:
     void createDescriptorPool();
     void createDescriptorSet();
 
-    void createTextureImage();
-    void createTextureImageView();
-    void createTextureSampler();
+    // Used for loading textures from files to Texture structs
+    void createTextureImage(const std::string filename, Texture& texture);
+    void createTextureImageView(Texture& texture);
+    void createTextureSampler(Texture& texture);
 
     void createDepthResources();
 
@@ -109,7 +127,7 @@ private:
     Mesh loadObj(std::string objpath) const;
     Mesh loadFbx(std::string fbxpath) const;
 
-    void loadTextures();
+    void loadTextures(std::vector<std::string> filenames);
 
     // helper functions
     std::pair<vk::Buffer, vk::DeviceMemory> createBuffer(vk::DeviceSize          size,
@@ -202,10 +220,10 @@ private:
     vk::Buffer       m_uniform_buffer;
     vk::DeviceMemory m_uniform_buffer_memory;
 
-    vk::Image        m_texture_image;
-    vk::ImageView    m_texture_image_view;
-    vk::DeviceMemory m_texture_image_memory;
-    vk::Sampler      m_texture_sampler;
+    // vk::Image        m_texture_image;
+    // vk::ImageView    m_texture_image_view;
+    // vk::DeviceMemory m_texture_image_memory;
+    // vk::Sampler      m_texture_sampler;
 
     vk::Image        m_depth_image;
     vk::ImageView    m_depth_image_view;
@@ -237,7 +255,7 @@ private:
 
     // Temporary model loading stuff for testing. Eventually these will become a cache of meshes and
     // assets stored elsewhere.
-    Mesh m_mesh;
+    // Mesh m_mesh;
 
     // Asset Caches. TODO: use maps instead of a vector of meshes
     std::vector<Mesh> m_meshes;

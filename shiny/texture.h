@@ -31,7 +31,7 @@ public:
     void updateDescriptor();
 
     // Release resources
-    void destroy();
+    void destroy(const vk::Device& device);
 };
 
 

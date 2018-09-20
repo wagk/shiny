@@ -9,14 +9,14 @@ Texture::updateDescriptor()
 }
 
 void
-Texture::destroy()
+Texture::destroy(const vk::Device& device)
 {
-    device->destroyImageView(image_view);
-    device->destroyImage(image);
+    device.destroyImageView(image_view);
+    device.destroyImage(image);
     if (sampler) {
-        device->destroySampler(sampler);
+        device.destroySampler(sampler);
     }
-    device->freeMemory(device_memory);
+    device.freeMemory(device_memory);
 }
 
 void

@@ -1564,48 +1564,52 @@ renderer::createCommandBuffers()
                    *&scissor);
                    */
 
-                  std::vector<vk::Buffer>     vertexbuffers = { m_mesh.vertex_buffer };
-                  std::vector<vk::DeviceSize> offsets       = { 0 };
+                  for (auto& mesh : m_meshes) {
 
-                  command_buffer.bindVertexBuffers(0, 1, vertexbuffers.data(), offsets.data());
-                  command_buffer.bindIndexBuffer(m_mesh.index_buffer, 0, vk::IndexType::eUint32);
+                      std::vector<vk::Buffer>     vertexbuffers = { mesh.vertex_buffer };
+                      std::vector<vk::DeviceSize> offsets       = { 0 };
 
-                  // Unlike vertex and index buffers, descriptor sets are not unique to graphics
-                  // pipelines. Therefore we need to specify if we want to bind descriptor sets to
-                  // the graphics or compute pipeline. The first parameter is the layout that the
-                  // descriptors are based on. The next three parameters specify the index of the
-                  // first descriptor set, the number of sets to bind, and the array of sets to
-                  // bind. We'll get back to this in a moment. The last two parameters specify an
-                  // array of offsets that are used for dynamic descriptors. We'll look at these in
-                  // a future chapter.
-                  command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                                    m_pipeline_layout, 0, 1, &m_descriptor_set, 0,
-                                                    nullptr);
+                      command_buffer.bindVertexBuffers(0, 1, vertexbuffers.data(), offsets.data());
+                      command_buffer.bindIndexBuffer(mesh.index_buffer, 0, vk::IndexType::eUint32);
 
-                  // The actual vkCmdDraw function is a bit anticlimactic, but it's so simple
-                  // because of all the information we specified in advance. It has the following
-                  // parameters, aside from the command buffer:
-                  // - vertexCount: Even though we don't have a vertex buffer, we technically still
-                  // have
-                  // 3
-                  //   vertices to draw.
-                  // - instanceCount: Used for instanced rendering, use 1 if you're not
-                  //   doing that.
-                  // - firstVertex: Used as an offset into the vertex buffer, defines the lowest
-                  //   value of gl_VertexIndex.
-                  // - firstInstance: Used as an offset for instanced rendering,
-                  //   defines the lowest value of gl_InstanceIndex.
-                  // command_buffer.draw((uint32_t)triangle_vertices.size(), 1, 0, 0);
+                      // Unlike vertex and index buffers, descriptor sets are not unique to graphics
+                      // pipelines. Therefore we need to specify if we want to bind descriptor sets
+                      // to the graphics or compute pipeline. The first parameter is the layout that
+                      // the descriptors are based on. The next three parameters specify the index
+                      // of the first descriptor set, the number of sets to bind, and the array of
+                      // sets to bind. We'll get back to this in a moment. The last two parameters
+                      // specify an array of offsets that are used for dynamic descriptors. We'll
+                      // look at these in a future chapter.
+                      command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                                        m_pipeline_layout, 0, 1,
+                                                        &mesh.descriptor_set, 0, nullptr);
 
-                  // A call to this function is very similar to vkCmdDraw. The first two parameters
-                  // specify the number of indices and the number of instances. We're not using
-                  // instancing, so just specify 1 instance. The number of indices represents the
-                  // number of vertices that will be passed to the vertex buffer. The next parameter
-                  // specifies an offset into the index buffer, using a value of 1 would cause the
-                  // graphics card to start reading at the second index. The second to last
-                  // parameter specifies an offset to add to the indices in the index buffer. The
-                  // final parameter specifies an offset for instancing, which we're not using.
-                  command_buffer.drawIndexed((uint32_t)m_mesh.indices.size(), 1, 0, 0, 0);
+                      // The actual vkCmdDraw function is a bit anticlimactic, but it's so simple
+                      // because of all the information we specified in advance. It has the
+                      // following parameters, aside from the command buffer:
+                      // - vertexCount: Even though we don't have a vertex buffer, we technically
+                      // still have
+                      // 3
+                      //   vertices to draw.
+                      // - instanceCount: Used for instanced rendering, use 1 if you're not
+                      //   doing that.
+                      // - firstVertex: Used as an offset into the vertex buffer, defines the lowest
+                      //   value of gl_VertexIndex.
+                      // - firstInstance: Used as an offset for instanced rendering,
+                      //   defines the lowest value of gl_InstanceIndex.
+                      // command_buffer.draw((uint32_t)triangle_vertices.size(), 1, 0, 0);
+
+                      // A call to this function is very similar to vkCmdDraw. The first two
+                      // parameters specify the number of indices and the number of instances. We're
+                      // not using instancing, so just specify 1 instance. The number of indices
+                      // represents the number of vertices that will be passed to the vertex buffer.
+                      // The next parameter specifies an offset into the index buffer, using a value
+                      // of 1 would cause the graphics card to start reading at the second index.
+                      // The second to last parameter specifies an offset to add to the indices in
+                      // the index buffer. The final parameter specifies an offset for instancing,
+                      // which we're not using.
+                      command_buffer.drawIndexed((uint32_t)mesh.indices.size(), 1, 0, 0, 0);
+                  }
               });
         });
     }
@@ -1675,52 +1679,56 @@ https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#vk
 void
 renderer::createVertexBuffer()
 {
-    vk::DeviceSize size = sizeof(decltype(m_mesh.vertices)::value_type) * m_mesh.vertices.size();
+    for (auto& mesh : m_meshes) {
 
-    // vk::Buffer       stagingbuffer;
-    // vk::DeviceMemory stagingbuffermemory;
 
-    auto [stagingbuffer, stagingbuffermemory] = createBuffer(
-      size, vk::BufferUsageFlagBits::eTransferSrc,
-      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+        vk::DeviceSize size = sizeof(decltype(mesh.vertices)::value_type) * mesh.vertices.size();
 
-    // Now we copy the triangle vertex data into the buffer
-    // You can now simply memcpy the vertex data to the mapped memory and unmap it again using
-    // vkUnmapMemory. Unfortunately the driver may not immediately copy the data into the buffer
-    // memory, for example because of caching. It is also possible that writes to the buffer are not
-    // visible in the mapped memory yet. There are two ways to deal with that problem:
-    //  - Use a memory heap that is host coherent, indicated with
-    //  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-    //  - Call vkFlushMappedMemoryRanges to after writing to the mapped memory, and call
-    //  vkInvalidateMappedMemoryRanges before reading from the mapped memory
-    // We went for the first approach, which ensures that the mapped memory always matches the
-    // contents of the allocated memory. Do keep in mind that this may lead to slightly worse
-    // performance than explicit flushing, but we'll see why that doesn't matter in the next
-    // chapter.
-    // {
-    //     void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
-    //     std::memcpy(data, triangle_vertices.data(), size);
-    //     m_device.unmapMemory(stagingbuffermemory);
-    // }
+        // vk::Buffer       stagingbuffer;
+        // vk::DeviceMemory stagingbuffermemory;
 
-    withMappedMemory(stagingbuffermemory, 0, size,
-                     [=](void* data) { std::memcpy(data, m_mesh.vertices.data(), size); });
+        auto [stagingbuffer, stagingbuffermemory] = createBuffer(
+          size, vk::BufferUsageFlagBits::eTransferSrc,
+          vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-    // The vertexBuffer is now allocated from a memory type that is device local, which generally
-    // means that we're not able to use vkMapMemory. However, we can copy data from the
-    // stagingBuffer to the vertexBuffer (using copyBuffer()). We have to indicate that we intend to
-    // do that by specifying the transfer source flag for the stagingBuffer and the transfer
-    // destination flag for the vertexBuffer, along with the vertex buffer usage flag.
-    std::tie(m_mesh.vertex_buffer, m_mesh.vertex_buffer_memory) = createBuffer(
-      size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-      vk::MemoryPropertyFlagBits::eDeviceLocal);
+        // Now we copy the triangle vertex data into the buffer
+        // You can now simply memcpy the vertex data to the mapped memory and unmap it again using
+        // vkUnmapMemory. Unfortunately the driver may not immediately copy the data into the buffer
+        // memory, for example because of caching. It is also possible that writes to the buffer are
+        // not visible in the mapped memory yet. There are two ways to deal with that problem:
+        //  - Use a memory heap that is host coherent, indicated with
+        //  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        //  - Call vkFlushMappedMemoryRanges to after writing to the mapped memory, and call
+        //  vkInvalidateMappedMemoryRanges before reading from the mapped memory
+        // We went for the first approach, which ensures that the mapped memory always matches the
+        // contents of the allocated memory. Do keep in mind that this may lead to slightly worse
+        // performance than explicit flushing, but we'll see why that doesn't matter in the next
+        // chapter.
+        // {
+        //     void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
+        //     std::memcpy(data, triangle_vertices.data(), size);
+        //     m_device.unmapMemory(stagingbuffermemory);
+        // }
 
-    copyBuffer(stagingbuffer, &m_mesh.vertex_buffer, size);
+        withMappedMemory(stagingbuffermemory, 0, size,
+                         [=](void* data) { std::memcpy(data, mesh.vertices.data(), size); });
 
-    m_device.destroyBuffer(stagingbuffer);
-    m_device.freeMemory(stagingbuffermemory);
+        // The vertexBuffer is now allocated from a memory type that is device local, which
+        // generally means that we're not able to use vkMapMemory. However, we can copy data from
+        // the stagingBuffer to the vertexBuffer (using copyBuffer()). We have to indicate that we
+        // intend to do that by specifying the transfer source flag for the stagingBuffer and the
+        // transfer destination flag for the vertexBuffer, along with the vertex buffer usage flag.
+        std::tie(mesh.vertex_buffer, mesh.vertex_buffer_memory) = createBuffer(
+          size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
+          vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-    // All that remains now is binding the vertex buffer during rendering operations.
+        copyBuffer(stagingbuffer, &mesh.vertex_buffer, size);
+
+        m_device.destroyBuffer(stagingbuffer);
+        m_device.freeMemory(stagingbuffermemory);
+
+        // All that remains now is binding the vertex buffer during rendering operations.
+    }
 }
 
 /*
@@ -1729,34 +1737,37 @@ We do exactly the same thing we did for createVertexBuffer and do it for indices
 void
 renderer::createIndexBuffer()
 {
-    vk::DeviceSize size = sizeof(decltype(m_mesh.indices)::value_type) * m_mesh.indices.size();
+    for (auto& mesh : m_meshes) {
 
-    // vk::Buffer       stagingbuffer;
-    // vk::DeviceMemory stagingbuffermemory;
+        vk::DeviceSize size = sizeof(decltype(mesh.indices)::value_type) * mesh.indices.size();
 
-    auto [stagingbuffer, stagingbuffermemory] = createBuffer(
-      size, vk::BufferUsageFlagBits::eTransferSrc,
-      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+        // vk::Buffer       stagingbuffer;
+        // vk::DeviceMemory stagingbuffermemory;
 
-    // {
-    //     void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
-    //     std::memcpy(data, triangle_indices.data(), size);
-    //     m_device.unmapMemory(stagingbuffermemory);
-    // }
+        auto [stagingbuffer, stagingbuffermemory] = createBuffer(
+          size, vk::BufferUsageFlagBits::eTransferSrc,
+          vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-    withMappedMemory(stagingbuffermemory, 0, size,
-                     [=](void* data) { std::memcpy(data, m_mesh.indices.data(), size); });
+        // {
+        //     void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
+        //     std::memcpy(data, triangle_indices.data(), size);
+        //     m_device.unmapMemory(stagingbuffermemory);
+        // }
 
-    std::tie(m_mesh.index_buffer, m_mesh.index_buffer_memory) = createBuffer(
-      size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
-      vk::MemoryPropertyFlagBits::eDeviceLocal);
+        withMappedMemory(stagingbuffermemory, 0, size,
+                         [=](void* data) { std::memcpy(data, mesh.indices.data(), size); });
 
-    copyBuffer(stagingbuffer, &m_mesh.index_buffer, size);
+        std::tie(mesh.index_buffer, mesh.index_buffer_memory) = createBuffer(
+          size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
+          vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-    m_device.destroyBuffer(stagingbuffer);
-    m_device.freeMemory(stagingbuffermemory);
+        copyBuffer(stagingbuffer, &mesh.index_buffer, size);
 
-    // All that remains now is binding the index buffer during rendering operations.
+        m_device.destroyBuffer(stagingbuffer);
+        m_device.freeMemory(stagingbuffermemory);
+
+        // All that remains now is binding the index buffer during rendering operations.
+    }
 }
 
 /*
@@ -1775,19 +1786,34 @@ renderer::createUniformBuffer()
 /*
 Descriptor sets can't be created directly, they must be allocated from a pool like command buffers.
 The equivalent for descriptor sets is unsurprisingly called a descriptor pool.
+
+        Descriptor pool
+
+        Actual descriptors are allocated from a descriptor pool telling the driver what types and
+        how many descriptors this application will use
+
+        An application can have multiple pools (e.g. for multiple threads) with any number of
+        descriptor types as long as device limits are not surpassed
+
+        It's good practice to allocate pools with actually required descriptor types and counts
 */
 void
 renderer::createDescriptorPool()
 {
-    std::array<vk::DescriptorPoolSize, 2> poolsizes = {};
-    // We only have a single descriptor right now with the uniform buffer type.
-    poolsizes[0].setType(vk::DescriptorType::eUniformBuffer).setDescriptorCount(1);
-    poolsizes[1].setType(vk::DescriptorType::eCombinedImageSampler).setDescriptorCount(1);
+    std::array<vk::DescriptorPoolSize, 2> descriptorPoolSizes = {};
+    // Uniform buffers : 1 for scene and 1 per object (scene and local matrices)
+    descriptorPoolSizes[0]
+      .setType(vk::DescriptorType::eUniformBuffer)
+      .setDescriptorCount(1 + static_cast<uint32_t>(m_meshes.size()));
+    // Combined image samples : 1 per mesh texture
+    descriptorPoolSizes[1]
+      .setType(vk::DescriptorType::eCombinedImageSampler)
+      .setDescriptorCount(static_cast<uint32_t>(m_meshes.size()));
 
     auto poolinfo = vk::DescriptorPoolCreateInfo()
-                      .setPoolSizeCount(static_cast<uint32_t>(poolsizes.size()))
-                      .setPPoolSizes(poolsizes.data())
-                      .setMaxSets(1);
+                      .setPoolSizeCount(static_cast<uint32_t>(descriptorPoolSizes.size()))
+                      .setPPoolSizes(descriptorPoolSizes.data())
+                      .setMaxSets(descriptorPoolSizes.size());
 
     if (!(m_descriptor_pool = m_device.createDescriptorPool(poolinfo))) {
         throw std::runtime_error("failed to create descriptor pool!");
@@ -1806,66 +1832,70 @@ renderer::createDescriptorSet()
 {
     std::vector<vk::DescriptorSetLayout> layouts = { m_descriptor_set_layout };
 
-    auto allocinfo = vk::DescriptorSetAllocateInfo()
-                       .setDescriptorPool(m_descriptor_pool)
-                       .setDescriptorSetCount((uint32_t)layouts.size())
-                       .setPSetLayouts(layouts.data());
+    for (auto& mesh : m_meshes) {
 
-    // NOTE: This returns a vector, not a single set
-    // NOTE: This call of allocateDescriptorSets causes an error message of a failure to allocate.
-    // Have to keep an eye on this to see if it goes away once the tutorial is done.
-    m_descriptor_set = m_device.allocateDescriptorSets(allocinfo).front();
+        auto allocinfo = vk::DescriptorSetAllocateInfo()
+                           .setDescriptorPool(m_descriptor_pool)
+                           .setDescriptorSetCount((uint32_t)layouts.size())
+                           .setPSetLayouts(layouts.data());
 
-    // The descriptor set has been allocated now, but the descriptors within still need to be
-    // configured. Descriptors that refer to buffers, like our uniform buffer descriptor, are
-    // configured with a VkDescriptorBufferInfo struct. This structure specifies the buffer and the
-    // region within it that contains the data for the descriptor:
-    auto bufferinfo = vk::DescriptorBufferInfo()
-                        .setBuffer(m_uniform_buffer)
-                        .setOffset(0)
-                        // If you're overwriting the whole buffer, like we are in this case, then it
-                        // is is also possible to use the VK_WHOLE_SIZE value for the range.
-                        .setRange(sizeof(uniformbufferobject));
+        // NOTE: This returns a vector, not a single set
+        // NOTE: This call of allocateDescriptorSets causes an error message of a failure to
+        // allocate. Have to keep an eye on this to see if it goes away once the tutorial is done.
+        mesh.descriptor_set = m_device.allocateDescriptorSets(allocinfo).front();
 
-    // The final step is to bind the actual image and sampler resources to the descriptor in the
-    // descriptor set.
-    auto imageinfo = vk::DescriptorImageInfo()
-                       .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
-                       .setImageView(m_texture_image_view)
-                       .setSampler(m_texture_sampler);
+        // The descriptor set has been allocated now, but the descriptors within still need to be
+        // configured. Descriptors that refer to buffers, like our uniform buffer descriptor, are
+        // configured with a VkDescriptorBufferInfo struct. This structure specifies the buffer and
+        // the region within it that contains the data for the descriptor:
+        mesh.buffer_info =
+          vk::DescriptorBufferInfo()
+            .setBuffer(m_uniform_buffer)
+            .setOffset(0)
+            // If you're overwriting the whole buffer, like we are in this case, then it
+            // is is also possible to use the VK_WHOLE_SIZE value for the range.
+            .setRange(sizeof(uniformbufferobject));
 
-    // The configuration of descriptors is updated using the vkUpdateDescriptorSets function, which
-    // takes an array of VkWriteDescriptorSet structs as parameter.
-    std::array<vk::WriteDescriptorSet, 2> descriptorWrites = {};
-    descriptorWrites[0]
-      // The first two fields specify the descriptor set to update and the binding
-      .setDstSet(m_descriptor_set)
-      //  We gave our uniform buffer binding index 0
-      .setDstBinding(0)
-      // Remember that descriptors can be arrays, so we also need to specify the first index in
-      // the array that we want to update. We're not using an array, so the index is simply 0
-      .setDstArrayElement(0)
-      // We need to specify the type of descriptor again. It's possible to update multiple
-      // descriptors at once in an array, starting at index dstArrayElement
-      .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-      // The descriptorCount field specifies how many array elements you want to update.
-      .setDescriptorCount(1)
-      // The last field references an array with $descriptorCount structs that actually configure
-      // the descriptors. It depends on the type of descriptor which one of the three you actually
-      // need to use.
-      .setPBufferInfo(&bufferinfo);
-    descriptorWrites[1]
-      .setDstSet(m_descriptor_set)
-      .setDstBinding(1)
-      .setDstArrayElement(0)
-      .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-      .setDescriptorCount(1)
-      .setPImageInfo(&imageinfo);
+        // The final step is to bind the actual image and sampler resources to the descriptor in the
+        // descriptor set.
+        mesh.texture.descriptor = vk::DescriptorImageInfo()
+                                    .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
+                                    .setImageView(mesh.texture.image_view)
+                                    .setSampler(mesh.texture.sampler);
 
-    // The 0 is for the number of copies, and nullptr is for a vk::CopyDescriptorSet
-    m_device.updateDescriptorSets(static_cast<uint32_t>(descriptorWrites.size()),
-                                  descriptorWrites.data(), 0, nullptr);
-    // m_device.updateDescriptorSets(descriptorWrites[1], nullptr);
+        // The configuration of descriptors is updated using the vkUpdateDescriptorSets function,
+        // which takes an array of VkWriteDescriptorSet structs as parameter.
+        std::array<vk::WriteDescriptorSet, 2> descriptorWrites = {};
+        descriptorWrites[0]
+          // The first two fields specify the descriptor set to update and the binding
+          .setDstSet(mesh.descriptor_set)
+          //  We gave our uniform buffer binding index 0
+          .setDstBinding(0)
+          // Remember that descriptors can be arrays, so we also need to specify the first index in
+          // the array that we want to update. We're not using an array, so the index is simply 0
+          .setDstArrayElement(0)
+          // We need to specify the type of descriptor again. It's possible to update multiple
+          // descriptors at once in an array, starting at index dstArrayElement
+          .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+          // The descriptorCount field specifies how many array elements you want to update.
+          .setDescriptorCount(1)
+          // The last field references an array with $descriptorCount structs that actually
+          // configure the descriptors. It depends on the type of descriptor which one of the three
+          // you actually need to use.
+          .setPBufferInfo(&mesh.buffer_info);
+        descriptorWrites[1]
+          .setDstSet(mesh.descriptor_set)
+          .setDstBinding(1)
+          .setDstArrayElement(0)
+          .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+          .setDescriptorCount(1)
+          .setPImageInfo(&mesh.texture.descriptor);
+
+        // The 0 is for the number of copies, and nullptr is for a vk::CopyDescriptorSet
+        m_device.updateDescriptorSets(static_cast<uint32_t>(descriptorWrites.size()),
+                                      descriptorWrites.data(), 0, nullptr);
+        // m_device.updateDescriptorSets(descriptorWrites[1], nullptr);
+    }
 }
 
 /*
@@ -1915,10 +1945,10 @@ we'll see how pipeline barriers are used for this purpose. Barriers can addition
 transfer queue family ownership when using VK_SHARING_MODE_EXCLUSIVE.
 */
 void
-renderer::createTextureImage()
+renderer::createTextureImage(const std::string filename, Texture& texture)
 {
     int      width, height, channels;
-    stbi_uc* pixels = stbi_load(texture_filename, &width, &height, &channels, STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load(filename.c_str(), &width, &height, &channels, STBI_rgb_alpha);
 
     if (!pixels) {
         throw std::runtime_error("Failed to load image!");
@@ -1938,18 +1968,18 @@ renderer::createTextureImage()
 
     stbi_image_free(pixels);
 
-    std::tie(m_texture_image, m_texture_image_memory) =
+    std::tie(texture.image, texture.device_memory) =
       createImage(width, height, vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
                   vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
                   vk::MemoryPropertyFlagBits::eDeviceLocal);
     // Transition the texture image to VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-    transitionImageLayout(m_texture_image, vk::Format::eR8G8B8A8Unorm, vk::ImageLayout::eUndefined,
+    transitionImageLayout(texture.image, vk::Format::eR8G8B8A8Unorm, vk::ImageLayout::eUndefined,
                           vk::ImageLayout::eTransferDstOptimal);
     // Execute the buffer to image copy operation
-    copyBufferToImage(stagingbuffer, m_texture_image, width, height);
+    copyBufferToImage(stagingbuffer, texture.image, width, height);
     // To be able to start sampling from the texture image in the shader, we need one last
     // transition to prepare it for shader access
-    transitionImageLayout(m_texture_image, vk::Format::eR8G8B8A8Unorm,
+    transitionImageLayout(texture.image, vk::Format::eR8G8B8A8Unorm,
                           vk::ImageLayout::eTransferDstOptimal,
                           vk::ImageLayout::eShaderReadOnlyOptimal);
 
@@ -1958,14 +1988,14 @@ renderer::createTextureImage()
 }
 
 void
-renderer::createTextureImageView()
+renderer::createTextureImageView(Texture& texture)
 {
-    m_texture_image_view =
-      createImageView(m_texture_image, vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor);
+    texture.image_view =
+      createImageView(texture.image, vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor);
 }
 
 void
-renderer::createTextureSampler()
+renderer::createTextureSampler(Texture& texture)
 {
     // Samplers are configured through a VkSamplerCreateInfo structure, which specifies all filters
     // and transformations that it should apply.
@@ -2022,7 +2052,7 @@ renderer::createTextureSampler()
       .setCompareOp(vk::CompareOp::eAlways)
       .setMipmapMode(vk::SamplerMipmapMode::eLinear);
 
-    if (!(m_texture_sampler = m_device.createSampler(samplerInfo))) {
+    if (!(texture.sampler = m_device.createSampler(samplerInfo))) {
         throw std::runtime_error("failed to create tetxture sampler!");
     }
 }
@@ -2092,7 +2122,9 @@ just like we had to do for every vertex attribute and its location index.
 void
 renderer::createDescriptorSetLayout()
 {
-    auto ubolayoutbinding =
+    std::array<vk::DescriptorSetLayoutBinding, 2> setLayoutBindings{};
+
+    setLayoutBindings[0] =
       vk::DescriptorSetLayoutBinding()
         // The first two fields specify the `binding` used in the shader and
         // the type of descriptor, which is a uniform buffer object.
@@ -2109,19 +2141,16 @@ renderer::createDescriptorSetLayout()
         // vertex shader.
         .setStageFlags(vk::ShaderStageFlagBits::eVertex);
 
-    auto samplerlayoutbinding = vk::DescriptorSetLayoutBinding()
-                                  .setBinding(1)
-                                  .setDescriptorCount(1)
-                                  .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-                                  .setPImmutableSamplers(nullptr)
-                                  .setStageFlags(vk::ShaderStageFlagBits::eFragment);
-
-    std::array<vk::DescriptorSetLayoutBinding, 2> bindings = { ubolayoutbinding,
-                                                               samplerlayoutbinding };
+    setLayoutBindings[1] = vk::DescriptorSetLayoutBinding()
+                             .setBinding(1)
+                             .setDescriptorCount(1)
+                             .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                             .setStageFlags(vk::ShaderStageFlagBits::eFragment)
+                             .setPImmutableSamplers(nullptr);
 
     auto layoutinfo = vk::DescriptorSetLayoutCreateInfo()
-                        .setBindingCount(static_cast<uint32_t>(bindings.size()))
-                        .setPBindings(bindings.data());
+                        .setBindingCount(static_cast<uint32_t>(setLayoutBindings.size()))
+                        .setPBindings(setLayoutBindings.data());
 
     if (!(m_descriptor_set_layout = m_device.createDescriptorSetLayout(layoutinfo))) {
         throw std::runtime_error("failed to create descriptor set layout1");
@@ -2132,6 +2161,8 @@ void
 renderer::loadAssets()
 {
     loadModels(all_model_filenames);
+    loadTextures(all_texture_filenames);
+    // m_mesh = m_meshes[0];
 }
 
 void
@@ -2144,8 +2175,6 @@ renderer::loadModels(std::vector<std::string> filenames)
     for (auto filename : filenames) {
         m_meshes.push_back(loadFbx(filename));
     }
-
-    m_mesh = m_meshes[0];
 }
 
 Mesh
@@ -2276,9 +2305,25 @@ renderer::loadFbx(std::string fbxpath) const
     return newMesh;
 }
 
+
+// COMMENT: Right now, I have the Textures embedded in the Mesh struct.
+// This is a terrible idea for many reasons, but eventually what I want to do is to store the
+// filename as a key for my texture cache. That way any mesh can switch textures by simply changing
+// the string.
 void
-renderer::loadTextures()
-{}
+renderer::loadTextures(std::vector<std::string> filenames)
+{
+    int i = 0;
+    for (auto& mesh : m_meshes) {
+        // For now, we are deriving the texture filenames from hardcoded values.
+        // I already have filepaths derived from the fbx loading, but they are not usable without
+        // some altering. This I will get done overtime.
+        createTextureImage(filenames[i], mesh.texture);
+        createTextureImageView(mesh.texture);
+        createTextureSampler(mesh.texture);
+        ++i;
+    }
+}
 
 /*
 This is a helper function to create a buffer, allocate some memory for it, and bind them
@@ -2679,10 +2724,6 @@ renderer::initVulkan()
     createDepthResources();
     createFramebuffers();
     // Might want to move everything below this line to some other helper function
-    createTextureImage();
-    createTextureImageView();
-    createTextureSampler();
-
     loadAssets();
     // loadModels();  // TODO: EVENTUALLY LOADS A LIST
     createVertexBuffer();
@@ -2738,17 +2779,9 @@ renderer::cleanup()
     m_device.destroyBuffer(m_uniform_buffer);
     m_device.freeMemory(m_uniform_buffer_memory);
 
-    /*m_device.destroyBuffer(m_index_buffer);
-    m_device.freeMemory(m_index_buffer_memory);
-
-    m_device.destroyBuffer(m_vertex_buffer);
-    m_device.freeMemory(m_vertex_buffer_memory);*/
-
-    // delete image and texture views and samplers
-    m_device.destroySampler(m_texture_sampler);
-    m_device.destroyImageView(m_texture_image_view);
-    m_device.destroyImage(m_texture_image);
-    m_device.freeMemory(m_texture_image_memory);
+    for (auto& mesh : m_meshes) {
+        mesh.destroy(m_device);
+    }
 
     // command buffers are implicitly deleted when their command pool is deleted
     m_device.destroyCommandPool(m_command_pool);
