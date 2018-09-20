@@ -82,8 +82,6 @@ shadow map generation.
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <include/tiny_obj_loader.h>
 
-#include <OpenFBX/ofbx.h>
-
 #include <assimp/Importer.hpp>
 #include <assimp/cimport.h>
 #include <assimp/postprocess.h>
@@ -106,21 +104,27 @@ const std::vector<VulkanExtensionName> deviceExtensions = { VK_KHR_SWAPCHAIN_EXT
 
 const std::array<float, 4> backgroundColor = { 0.033f, 0.111f, 0.124f, 1.0f };
 
-const std::vector<shiny::graphics::Vertex> triangle_vertices = {
-    { { -0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f } },
-    { { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 0.0f } },
-    { { 0.5f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
-    { { -0.5f, 0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } },
+// const std::vector<shiny::graphics::Vertex> triangle_vertices = {
+//    { { -0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f } },
+//    { { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 0.0f } },
+//    { { 0.5f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
+//    { { -0.5f, 0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } },
+//
+//    { { -0.5f, -0.5f, -0.5f }, { 1.0f, 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f } },
+//    { { 0.5f, -0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 0.0f } },
+//    { { 0.5f, 0.5f, -0.5f }, { 0.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
+//    { { -0.5f, 0.5f, -0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } }
+//};
+//
+// const std::vector<uint32_t> triangle_indices = { 0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4 };
+//
+// const shiny::graphics::Mesh triangle_mesh(triangle_vertices, triangle_indices);
 
-    { { -0.5f, -0.5f, -0.5f }, { 1.0f, 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f } },
-    { { 0.5f, -0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 0.0f } },
-    { { 0.5f, 0.5f, -0.5f }, { 0.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
-    { { -0.5f, 0.5f, -0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } }
-};
+const std::vector<std::string> all_model_filenames = { "models/imrodnew.fbx",
+                                                       "models/singleCubeSelection.fbx" };
 
-const std::vector<uint32_t> triangle_indices = { 0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4 };
-
-const shiny::graphics::Mesh triangle_mesh(triangle_vertices, triangle_indices);
+const std::vector<std::string> all_texture_filenames = { "textures/Imrod_Diffuse.png",
+                                                         "textures/texture.jpg" };
 
 const char* texture_filename = "textures/Imrod_Diffuse.png";
 const char* model_filename   = "models/imrod.fbx";
@@ -624,6 +628,7 @@ renderer::run()
 {
     initWindow();
     initVulkan();
+
     mainLoop();
     cleanup();
 }
@@ -2124,13 +2129,23 @@ renderer::createDescriptorSetLayout()
 }
 
 void
-renderer::loadModels()
+renderer::loadAssets()
+{
+    loadModels(all_model_filenames);
+}
+
+void
+renderer::loadModels(std::vector<std::string> filenames)
 {
     // m_mesh = Mesh(triangle_vertices, triangle_indices);
     // Loading OBJ works! woohoo
     // m_mesh = loadObj("models/chalet.obj");
 
-    m_mesh = loadFbx(model_filename);
+    for (auto filename : filenames) {
+        m_meshes.push_back(loadFbx(filename));
+    }
+
+    m_mesh = m_meshes[0];
 }
 
 Mesh
@@ -2193,14 +2208,6 @@ renderer::loadFbx(std::string fbxpath) const
     // that we load more than one Mesh from an fbx.
     for (int i = 0; i < meshCount; ++i) {
         // Step 1: Fetch all relevant data fields from the parsed file
-        /*const ofbx::Mesh&     mesh         = *scene->getMesh(i);
-        const ofbx::Geometry& geom         = *mesh.getGeometry();
-        int                   vertex_count = geom.getVertexCount();
-        const ofbx::Vec3*     vertices     = geom.getVertices();
-        const ofbx::Vec4*     colors       = geom.getColors();
-        const ofbx::Vec3*     normals      = geom.getNormals();
-        const ofbx::Vec2*     uvs          = geom.getUVs();*/
-
         const aiMesh* pMesh = pScene->mMeshes[i];
         vertexCount += pMesh->mNumVertices;
 
@@ -2208,8 +2215,15 @@ renderer::loadFbx(std::string fbxpath) const
         // auto colors   = pMesh->mColors;
         auto normals = pMesh->mNormals;
 
+        // Get material properties
         aiColor3D pColor(0.f, 0.f, 0.f);
         pScene->mMaterials[pMesh->mMaterialIndex]->Get(AI_MATKEY_COLOR_DIFFUSE, pColor);
+        aiString path;
+        pScene->mMaterials[pMesh->mMaterialIndex]->GetTexture(aiTextureType_DIFFUSE, 0, &path);
+        if (path.length > 0) {
+            newMesh.texture_filename = path.C_Str();
+        }  // TODO: truncate the path to get just the filename. Maybe other fancy stuff for
+           // subdirectories. But for now, I can get the filepath from the fbx.
 
         const aiVector3D Zero3D(0.0f, 0.0f, 0.0f);
 
@@ -2261,6 +2275,10 @@ renderer::loadFbx(std::string fbxpath) const
 
     return newMesh;
 }
+
+void
+renderer::loadTextures()
+{}
 
 /*
 This is a helper function to create a buffer, allocate some memory for it, and bind them
@@ -2660,15 +2678,20 @@ renderer::initVulkan()
     createCommandPool();
     createDepthResources();
     createFramebuffers();
+    // Might want to move everything below this line to some other helper function
     createTextureImage();
     createTextureImageView();
     createTextureSampler();
-    loadModels();  // TODO: EVENTUALLY LOADS A LIST
+
+    loadAssets();
+    // loadModels();  // TODO: EVENTUALLY LOADS A LIST
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffer();
+    // Setup Descriptors
     createDescriptorPool();
     createDescriptorSet();
+    // Build Command Buffers
     createCommandBuffers();
     createSemaphores();
     createFences();

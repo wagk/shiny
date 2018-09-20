@@ -7,6 +7,8 @@
 
 #include <glm/glm.hpp>
 
+#include "texture.h"
+
 
 namespace shiny::graphics {
 
@@ -33,9 +35,11 @@ struct Mesh
     std::vector<Vertex>   vertices;
     std::vector<uint32_t> indices;
     vk::Buffer            vertex_buffer;
-    vk::DeviceMemory      vertex_buffer_memory;
     vk::Buffer            index_buffer;
+    vk::DeviceMemory      vertex_buffer_memory;
     vk::DeviceMemory      index_buffer_memory;
+    Texture2D             texture;
+    std::string           texture_filename;
 };
 
 /*
@@ -99,11 +103,13 @@ private:
 
     // Load functions
     // Implementing some specific ones for now
-    void loadModels();  // Might eventually want to change this to accept a vector of strings
-                        // to load more than one file. This will be called from elsewhere.
-    Mesh loadObj(std::string objpath) const;
+    void loadAssets();
 
+    void loadModels(std::vector<std::string> filenames);
+    Mesh loadObj(std::string objpath) const;
     Mesh loadFbx(std::string fbxpath) const;
+
+    void loadTextures();
 
     // helper functions
     std::pair<vk::Buffer, vk::DeviceMemory> createBuffer(vk::DeviceSize          size,
@@ -232,6 +238,9 @@ private:
     // Temporary model loading stuff for testing. Eventually these will become a cache of meshes and
     // assets stored elsewhere.
     Mesh m_mesh;
+
+    // Asset Caches. TODO: use maps instead of a vector of meshes
+    std::vector<Mesh> m_meshes;
 };
 
 /*

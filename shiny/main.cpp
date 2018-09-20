@@ -14,9 +14,9 @@ WCHAR     szTitle[MAX_LOADSTRING];
 WCHAR     szWindowClass[MAX_LOADSTRING];
 
 // Forward declarations of functions included in this code module:
-// ATOM    MyRegisterClass(HINSTANCE hInstance);
-// BOOL    InitInstance(HINSTANCE, int);
-// LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+ATOM    MyRegisterClass(HINSTANCE hInstance);
+BOOL    InitInstance(HINSTANCE, int);
+LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
 // This is the old main. Keeping this as a fallback until I get the rest setup right
 int
