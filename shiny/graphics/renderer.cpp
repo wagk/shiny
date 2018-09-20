@@ -628,7 +628,8 @@ renderer::run()
 {
     initWindow();
     initVulkan();
-
+    // TODO: Maybe put another function here to split up the work done by initVulkan(). Like a
+    // Prepare();
     mainLoop();
     cleanup();
 }
@@ -1781,6 +1782,15 @@ renderer::createUniformBuffer()
     std::tie(m_uniform_buffer, m_uniform_buffer_memory) = createBuffer(
       buffersize, vk::BufferUsageFlagBits::eUniformBuffer,
       vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+
+    for (auto& mesh : m_meshes) {
+        vk::DeviceSize buffersize = sizeof(mesh.matrices);
+
+        std::tie(mesh.uniform_buffer, mesh.uniform_buffer_memory) = createBuffer(
+          buffersize, vk::BufferUsageFlagBits::eUniformBuffer,
+          vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    }
 }
 
 /*
@@ -2105,14 +2115,27 @@ renderer::updateUniformBuffer()
     // upside down.
     ubo.proj[1][1] *= -1;
 
+    withMappedMemory(m_uniform_buffer_memory, 0, sizeof(ubo),
+                     [=](void* data) { std::memcpy(data, &ubo, sizeof(ubo)); });
+
+    // Update the meshes
+    m_meshes[0].matrices.model = glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.0f, 0.0f));
+    m_meshes[1].matrices.model = glm::translate(glm::mat4(1.0f), glm::vec3(1.5f, 0.5f, 0.0f));
+
+    for (auto& mesh : m_meshes) {
+        mesh.matrices.proj = ubo.proj;
+        mesh.matrices.view = ubo.view;
+
+        withMappedMemory(mesh.uniform_buffer_memory, 0, sizeof(mesh.matrices), [=](void* data) {
+            std::memcpy(data, &mesh.matrices, sizeof(mesh.matrices));
+        });
+    }
+
     // {
     //     void* data = m_device.mapMemory(m_uniform_buffer_memory, 0, sizeof(ubo));
     //     std::memcpy(data, &ubo, sizeof(ubo));
     //     m_device.unmapMemory(m_uniform_buffer_memory);
     // }
-
-    withMappedMemory(m_uniform_buffer_memory, 0, sizeof(ubo),
-                     [=](void* data) { std::memcpy(data, &ubo, sizeof(ubo)); });
 }
 
 /*
@@ -2775,9 +2798,6 @@ renderer::cleanup()
 
     m_device.destroyDescriptorPool(m_descriptor_pool);
     m_device.destroyDescriptorSetLayout(m_descriptor_set_layout);
-
-    m_device.destroyBuffer(m_uniform_buffer);
-    m_device.freeMemory(m_uniform_buffer_memory);
 
     for (auto& mesh : m_meshes) {
         mesh.destroy(m_device);

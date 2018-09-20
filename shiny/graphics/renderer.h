@@ -50,12 +50,13 @@ struct Mesh
     std::vector<uint32_t>    indices;
     vk::Buffer               vertex_buffer;
     vk::Buffer               index_buffer;
+    vk::Buffer               uniform_buffer;
     vk::DeviceMemory         vertex_buffer_memory;
     vk::DeviceMemory         index_buffer_memory;
+    vk::DeviceMemory         uniform_buffer_memory;
     vk::DescriptorSet        descriptor_set;
     vk::DescriptorBufferInfo buffer_info;
     Texture2D                texture;
-    vk::Buffer               uniform_buffer;
     glm::vec3                rotation;
     std::string              texture_filename;
 
@@ -65,6 +66,8 @@ struct Mesh
         device.freeMemory(index_buffer_memory);
         device.destroyBuffer(vertex_buffer);
         device.freeMemory(vertex_buffer_memory);
+        device.destroyBuffer(uniform_buffer);
+        device.freeMemory(uniform_buffer_memory);
         // delete image and texture views and samplers
         texture.destroy(device);
     }
