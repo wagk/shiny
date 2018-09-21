@@ -676,6 +676,7 @@ renderer::drawFrame()
     }
 
     auto imageindex = next_image_results.value;
+    updateUniformBuffer();
 
     // Queue submission and synchronization is configured through parameters in the VkSubmitInfo
     // structure.
@@ -1777,17 +1778,60 @@ Much like vertex and index buffers, we have a buffer for uniform values
 void
 renderer::createUniformBuffer()
 {
-    // vk::DeviceSize buffersize = sizeof(uniformbufferobject);
+    vk::DeviceSize buffersize = sizeof(uniformbufferobject);
 
     std::tie(m_uniform_buffer, m_uniform_buffer_memory) = createBuffer(
-      sizeof(uniformbufferobject), vk::BufferUsageFlagBits::eUniformBuffer,
+      buffersize, vk::BufferUsageFlagBits::eUniformBuffer,
       vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
 
     for (auto& mesh : m_meshes) {
         std::tie(mesh.uniform_buffer, mesh.uniform_buffer_memory) = createBuffer(
-          sizeof(mesh.matrices), vk::BufferUsageFlagBits::eUniformBuffer,
+          buffersize, vk::BufferUsageFlagBits::eUniformBuffer,
           vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    }
+}
+
+
+/*
+We need to provide details about every descriptor binding used in the shaders for pipeline creation,
+just like we had to do for every vertex attribute and its location index.
+*/
+void
+renderer::createDescriptorSetLayout()
+{
+    std::array<vk::DescriptorSetLayoutBinding, 2> setLayoutBindings{};
+
+    setLayoutBindings[0] =
+      vk::DescriptorSetLayoutBinding()
+        // The first two fields specify the `binding` used in the shader and
+        // the type of descriptor, which is a uniform buffer object.
+        .setBinding(0)
+        // It is possible for the shader variable to represent an array of uniform buffer objects,
+        // and descriptorCount specifies the number of values in the array. This could be used to
+        // specify a transformation for each of the bones in a skeleton for skeletal animation, for
+        // example.
+        .setDescriptorCount(1)
+        .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+        // We also need to specify in which shader stages the descriptor is going to be referenced.
+        // The stageFlags field can be a combination of VkShaderStageFlagBits values or the value
+        // VK_SHADER_STAGE_ALL_GRAPHICS. In our case, we're only referencing the descriptor from the
+        // vertex shader.
+        .setStageFlags(vk::ShaderStageFlagBits::eVertex);
+
+    setLayoutBindings[1] = vk::DescriptorSetLayoutBinding()
+                             .setBinding(1)
+                             .setDescriptorCount(1)
+                             .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                             .setStageFlags(vk::ShaderStageFlagBits::eFragment)
+                             .setPImmutableSamplers(nullptr);
+
+    auto layoutinfo = vk::DescriptorSetLayoutCreateInfo()
+                        .setBindingCount(static_cast<uint32_t>(setLayoutBindings.size()))
+                        .setPBindings(setLayoutBindings.data());
+
+    if (!(m_descriptor_set_layout = m_device.createDescriptorSetLayout(layoutinfo))) {
+        throw std::runtime_error("failed to create descriptor set layout1");
     }
 }
 
@@ -1840,69 +1884,84 @@ renderer::createDescriptorSet()
 {
     std::vector<vk::DescriptorSetLayout> layouts = { m_descriptor_set_layout };
 
+    auto allocinfo = vk::DescriptorSetAllocateInfo()
+                       .setDescriptorPool(m_descriptor_pool)
+                       .setDescriptorSetCount((uint32_t)layouts.size())
+                       .setPSetLayouts(layouts.data());
+    /*
+// NOTE: This returns a vector, not a single set
+// NOTE: This call of allocateDescriptorSets causes an error message of a failure to
+// allocate. Have to keep an eye on this to see if it goes away once the tutorial is done.
+m_descriptor_set = m_device.allocateDescriptorSets(allocinfo).front();
+
+// The descriptor set has been allocated now, but the descriptors within still need to be
+// configured. Descriptors that refer to buffers, like our uniform buffer descriptor, are
+// configured with a VkDescriptorBufferInfo struct. This structure specifies the buffer and
+// the region within it that contains the data for the descriptor:
+auto bufferInfo = vk::DescriptorBufferInfo()
+                    .setBuffer(m_uniform_buffer)
+                    .setOffset(0)
+                    // If you're overwriting the whole buffer, like we are in this case, then
+                    // it is is also possible to use the VK_WHOLE_SIZE value for the range.
+                    .setRange(sizeof(uniformbufferobject));
+
+// The configuration of descriptors is updated using the vkUpdateDescriptorSets function,
+// which takes an array of VkWriteDescriptorSet structs as parameter.
+std::array<vk::WriteDescriptorSet, 1> ddescriptorWrites = {};
+ddescriptorWrites[0]
+  // The first two fields specify the descriptor set to update and the binding
+  .setDstSet(m_descriptor_set)
+  //  We gave our uniform buffer binding index 0
+  .setDstBinding(0)
+  // Remember that descriptors can be arrays, so we also need to specify the first index in
+  // the array that we want to update. We're not using an array, so the index is simply 0
+  .setDstArrayElement(0)
+  // We need to specify the type of descriptor again. It's possible to update multiple
+  // descriptors at once in an array, starting at index dstArrayElement
+  .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+  // The descriptorCount field specifies how many array elements you want to update.
+  .setDescriptorCount(1)
+  // The last field references an array with $descriptorCount structs that actually
+  // configure the descriptors. It depends on the type of descriptor which one of the three
+  // you actually need to use.
+  .setPBufferInfo(&bufferInfo);
+
+// The 0 is for the number of copies, and nullptr is for a vk::CopyDescriptorSet
+m_device.updateDescriptorSets(static_cast<uint32_t>(ddescriptorWrites.size()),
+                              ddescriptorWrites.data(), 0, nullptr);*/
     for (auto& mesh : m_meshes) {
 
-        auto allocinfo = vk::DescriptorSetAllocateInfo()
-                           .setDescriptorPool(m_descriptor_pool)
-                           .setDescriptorSetCount((uint32_t)layouts.size())
-                           .setPSetLayouts(layouts.data());
-
-        // NOTE: This returns a vector, not a single set
-        // NOTE: This call of allocateDescriptorSets causes an error message of a failure to
-        // allocate. Have to keep an eye on this to see if it goes away once the tutorial is done.
         mesh.descriptor_set = m_device.allocateDescriptorSets(allocinfo).front();
 
-        // The descriptor set has been allocated now, but the descriptors within still need to be
-        // configured. Descriptors that refer to buffers, like our uniform buffer descriptor, are
-        // configured with a VkDescriptorBufferInfo struct. This structure specifies the buffer and
-        // the region within it that contains the data for the descriptor:
-        mesh.buffer_info =
-          vk::DescriptorBufferInfo()
-            .setBuffer(m_uniform_buffer)
-            .setOffset(0)
-            // If you're overwriting the whole buffer, like we are in this case, then it
-            // is is also possible to use the VK_WHOLE_SIZE value for the range.
-            .setRange(sizeof(uniformbufferobject));
+        auto buffer_info = vk::DescriptorBufferInfo()
+                             .setBuffer(mesh.uniform_buffer)
+                             //.setBuffer(m_uniform_buffer)
+                             .setOffset(0)
+                             .setRange(sizeof(uniformbufferobject));
 
-        // The final step is to bind the actual image and sampler resources to the descriptor in the
-        // descriptor set.
-        mesh.texture.descriptor = vk::DescriptorImageInfo()
-                                    .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
-                                    .setImageView(mesh.texture.image_view)
-                                    .setSampler(mesh.texture.sampler);
+        auto image_info = vk::DescriptorImageInfo()
+                            .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
+                            .setImageView(mesh.texture.image_view)
+                            .setSampler(mesh.texture.sampler);
 
-        // The configuration of descriptors is updated using the vkUpdateDescriptorSets function,
-        // which takes an array of VkWriteDescriptorSet structs as parameter.
         std::array<vk::WriteDescriptorSet, 2> descriptorWrites = {};
         descriptorWrites[0]
-          // The first two fields specify the descriptor set to update and the binding
           .setDstSet(mesh.descriptor_set)
-          //  We gave our uniform buffer binding index 0
           .setDstBinding(0)
-          // Remember that descriptors can be arrays, so we also need to specify the first index in
-          // the array that we want to update. We're not using an array, so the index is simply 0
           .setDstArrayElement(0)
-          // We need to specify the type of descriptor again. It's possible to update multiple
-          // descriptors at once in an array, starting at index dstArrayElement
           .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-          // The descriptorCount field specifies how many array elements you want to update.
           .setDescriptorCount(1)
-          // The last field references an array with $descriptorCount structs that actually
-          // configure the descriptors. It depends on the type of descriptor which one of the three
-          // you actually need to use.
-          .setPBufferInfo(&mesh.buffer_info);
+          .setPBufferInfo(&buffer_info);
         descriptorWrites[1]
           .setDstSet(mesh.descriptor_set)
           .setDstBinding(1)
           .setDstArrayElement(0)
           .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
           .setDescriptorCount(1)
-          .setPImageInfo(&mesh.texture.descriptor);
+          .setPImageInfo(&image_info);
 
-        // The 0 is for the number of copies, and nullptr is for a vk::CopyDescriptorSet
         m_device.updateDescriptorSets(static_cast<uint32_t>(descriptorWrites.size()),
                                       descriptorWrites.data(), 0, nullptr);
-        // m_device.updateDescriptorSets(descriptorWrites[1], nullptr);
     }
 }
 
@@ -2100,9 +2159,9 @@ renderer::updateUniformBuffer()
       std::chrono::duration<float, std::chrono::seconds::period>(current_t - start_t).count();
 
     uniformbufferobject ubo;
-    // ubo.model = glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f, 0.f));
+    ubo.model = glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f, 0.f));
     ubo.view =
-      glm::lookAt(glm::vec3(6.f, 5.f, 0.f), glm::vec3(0.f, 3.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
+      glm::lookAt(glm::vec3(0.f, 2.f, 7.5f), glm::vec3(0.f, 2.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
     ubo.proj =
       glm::perspective(glm::radians(45.0f),
                        m_swapchain_extent.width / (float)m_swapchain_extent.height, 0.1f, 100.0f);
@@ -2111,70 +2170,39 @@ renderer::updateUniformBuffer()
     // inverted. The easiest way to compensate for that is to flip the sign on the scaling factor of
     // the Y axis in the projection matrix. If you don't do this, then the image will be rendered
     // upside down.
+    // ubo.proj = camera.proj;
     ubo.proj[1][1] *= -1;
 
-    withMappedMemory(m_uniform_buffer_memory, 0, sizeof(ubo),
-                     [=](void* data) { std::memcpy(data, &ubo, sizeof(ubo)); });
+    // Until I figure out how to map a uniform buffer for the camera, this will just remain
+    // commented out
+    /*withMappedMemory(m_uniform_buffer_memory, 0, sizeof(uniformbufferobject),
+                     [=](void* data) { std::memcpy(data, &ubo, sizeof(uniformbufferobject)); });*/
 
     // Update the meshes
-    m_meshes[0].matrices.model = glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.0f, 0.0f));
-    m_meshes[1].matrices.model = glm::translate(glm::mat4(1.0f), glm::vec3(3.5f, 0.5f, 0.0f));
+    m_meshes[0].matrices.model = glm::translate(ubo.model, glm::vec3(-2.0f, 0.0f, 0.0f));
+    m_meshes[1].matrices.model = glm::translate(ubo.model, glm::vec3(1.5f, 0.5f, 1.0f));
 
     for (auto& mesh : m_meshes) {
         mesh.matrices.proj = ubo.proj;
         mesh.matrices.view = ubo.view;
-
-        withMappedMemory(mesh.uniform_buffer_memory, 0, sizeof(mesh.matrices), [=](void* data) {
-            std::memcpy(data, &mesh.matrices, sizeof(mesh.matrices));
-        });
+        withMappedMemory(
+          mesh.uniform_buffer_memory, 0, sizeof(uniformbufferobject),
+          [=](void* data) { std::memcpy(data, &mesh.matrices, sizeof(uniformbufferobject)); });
     }
 }
 
-/*
-We need to provide details about every descriptor binding used in the shaders for pipeline creation,
-just like we had to do for every vertex attribute and its location index.
-*/
-void
-renderer::createDescriptorSetLayout()
-{
-    std::array<vk::DescriptorSetLayoutBinding, 2> setLayoutBindings{};
-
-    setLayoutBindings[0] =
-      vk::DescriptorSetLayoutBinding()
-        // The first two fields specify the `binding` used in the shader and
-        // the type of descriptor, which is a uniform buffer object.
-        .setBinding(0)
-        // It is possible for the shader variable to represent an array of uniform buffer objects,
-        // and descriptorCount specifies the number of values in the array. This could be used to
-        // specify a transformation for each of the bones in a skeleton for skeletal animation, for
-        // example.
-        .setDescriptorCount(1)
-        .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-        // We also need to specify in which shader stages the descriptor is going to be referenced.
-        // The stageFlags field can be a combination of VkShaderStageFlagBits values or the value
-        // VK_SHADER_STAGE_ALL_GRAPHICS. In our case, we're only referencing the descriptor from the
-        // vertex shader.
-        .setStageFlags(vk::ShaderStageFlagBits::eVertex);
-
-    setLayoutBindings[1] = vk::DescriptorSetLayoutBinding()
-                             .setBinding(1)
-                             .setDescriptorCount(1)
-                             .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-                             .setStageFlags(vk::ShaderStageFlagBits::eFragment)
-                             .setPImmutableSamplers(nullptr);
-
-    auto layoutinfo = vk::DescriptorSetLayoutCreateInfo()
-                        .setBindingCount(static_cast<uint32_t>(setLayoutBindings.size()))
-                        .setPBindings(setLayoutBindings.data());
-
-    if (!(m_descriptor_set_layout = m_device.createDescriptorSetLayout(layoutinfo))) {
-        throw std::runtime_error("failed to create descriptor set layout1");
-    }
-}
 
 void
 renderer::loadAssets()
 {
+    // TEMPORARY: Camera settings here
+    camera.model;
+    camera.proj =
+      glm::lookAt(glm::vec3(0.f, 3.f, 5.f), glm::vec3(0.f, 3.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
+    camera.view = glm::ortho(-4.0f / 3.0f, 4.0f / 3.0f, -1.0f, 1.0f, -1.0f, 1.0f);
+    camera.proj[1][1] *= -1;
+
+    // Load models and Textures
     loadModels(all_model_filenames);
     loadTextures(all_texture_filenames);
     // m_mesh = m_meshes[0];
@@ -2731,9 +2759,9 @@ renderer::initVulkan()
     pickPhysicalDevice();
     createLogicalDevice();
     createSwapChain();
+    createDescriptorSetLayout();
     createImageViews();
     createRenderPass();
-    createDescriptorSetLayout();
     createGraphicsPipeline();
     createCommandPool();
     createDepthResources();
@@ -2758,7 +2786,6 @@ renderer::mainLoop()
 {
     while (!glfwWindowShouldClose(m_window)) {
         glfwPollEvents();
-        updateUniformBuffer();
         drawFrame();
     }
 

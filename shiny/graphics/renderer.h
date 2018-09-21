@@ -59,6 +59,7 @@ struct Mesh
     Texture2D                texture;
     glm::vec3                rotation;
     std::string              texture_filename;
+    void*                    mapped;
 
     void destroy(const vk::Device& device)
     {
@@ -110,6 +111,8 @@ private:
     void createUniformBuffer();
 
     void updateUniformBuffer();
+
+    void createDescriptorSetLayout();
     void createDescriptorPool();
     void createDescriptorSet();
 
@@ -120,7 +123,6 @@ private:
 
     void createDepthResources();
 
-    void createDescriptorSetLayout();
 
     // Load functions
     // Implementing some specific ones for now
@@ -214,19 +216,8 @@ private:
     vk::Extent2D                 m_swapchain_extent;
     std::vector<vk::Framebuffer> m_swapchain_framebuffers;
 
-    /*vk::Buffer       m_vertex_buffer;
-    vk::DeviceMemory m_vertex_buffer_memory;
-
-    vk::Buffer       m_index_buffer;
-    vk::DeviceMemory m_index_buffer_memory;*/
-
     vk::Buffer       m_uniform_buffer;
     vk::DeviceMemory m_uniform_buffer_memory;
-
-    // vk::Image        m_texture_image;
-    // vk::ImageView    m_texture_image_view;
-    // vk::DeviceMemory m_texture_image_memory;
-    // vk::Sampler      m_texture_sampler;
 
     vk::Image        m_depth_image;
     vk::ImageView    m_depth_image_view;
@@ -261,7 +252,8 @@ private:
     // Mesh m_mesh;
 
     // Asset Caches. TODO: use maps instead of a vector of meshes
-    std::vector<Mesh> m_meshes;
+    uniformbufferobject camera;
+    std::vector<Mesh>   m_meshes;
 };
 
 /*
