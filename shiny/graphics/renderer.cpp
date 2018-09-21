@@ -2179,8 +2179,12 @@ renderer::updateUniformBuffer()
                      [=](void* data) { std::memcpy(data, &ubo, sizeof(uniformbufferobject)); });*/
 
     // Update the meshes
+    // Imrod translation
     m_meshes[0].matrices.model = glm::translate(ubo.model, glm::vec3(-2.0f, 0.0f, 0.0f));
+    // Cube translation
     m_meshes[1].matrices.model = glm::translate(ubo.model, glm::vec3(1.5f, 0.5f, 1.0f));
+    m_meshes[1].matrices.model = glm::rotate(m_meshes[1].matrices.model, time * glm::radians(60.f),
+                                             glm::vec3(1.0f, 1.0f, 1.0f));
 
     for (auto& mesh : m_meshes) {
         mesh.matrices.proj = ubo.proj;
