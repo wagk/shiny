@@ -131,7 +131,11 @@
     </PostBuildEvent>
     <PreBuildEvent>
       <Command>glslangValidator.exe -V $(ProjectDir)shaders\shader.vert -o $(ProjectDir)shaders\vert.spv
-glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders\frag.spv</Command>
+glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders\frag.spv
+glslangValidator.exe -V $(ProjectDir)shaders\phong.vert -o $(ProjectDir)shaders\phongvert.spv
+glslangValidator.exe -V $(ProjectDir)shaders\phong.frag -o $(ProjectDir)shaders\phongfrag.spv
+
+</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">

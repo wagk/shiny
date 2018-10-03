@@ -1155,8 +1155,8 @@ https://vulkan-tutorial.com/Drawing_a_triangle/Graphics_pipeline_basics/Fixed_fu
 void
 renderer::createGraphicsPipeline()
 {
-    auto vertshadercode = readFile("shaders/vert.spv");
-    auto fragshadercode = readFile("shaders/frag.spv");
+    auto vertshadercode = readFile("shaders/phongvert.spv");
+    auto fragshadercode = readFile("shaders/phongfrag.spv");
 
     m_vertex_shader_module   = createShaderModule(vertshadercode, m_device);
     m_fragment_shader_module = createShaderModule(fragshadercode, m_device);
@@ -1610,7 +1610,7 @@ renderer::createCommandBuffers()
                       // The second to last parameter specifies an offset to add to the indices in
                       // the index buffer. The final parameter specifies an offset for instancing,
                       // which we're not using.
-                      command_buffer.drawIndexed((uint32_t)mesh.indices.size(), 1, 0, 0, 0);
+                      command_buffer.drawIndexed(mesh.num_indices, 1, 0, 0, 0);
                   }
               });
         });
@@ -1678,58 +1678,60 @@ almost everything and memory management is one of those things.
 
 https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#vkCreateBuffer
 */
+
 void
-renderer::createVertexBuffer()
+renderer::createVertexBuffers()
 {
     for (auto& mesh : m_meshes) {
+        /*
 
+vk::DeviceSize size = sizeof(decltype(mesh.vertices)::value_type) * mesh.vertices.size();
 
-        vk::DeviceSize size = sizeof(decltype(mesh.vertices)::value_type) * mesh.vertices.size();
+// vk::Buffer       stagingbuffer;
+// vk::DeviceMemory stagingbuffermemory;
 
-        // vk::Buffer       stagingbuffer;
-        // vk::DeviceMemory stagingbuffermemory;
+auto [stagingbuffer, stagingbuffermemory] = createBuffer(
+  size, vk::BufferUsageFlagBits::eTransferSrc,
+  vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-        auto [stagingbuffer, stagingbuffermemory] = createBuffer(
-          size, vk::BufferUsageFlagBits::eTransferSrc,
-          vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+// Now we copy the triangle vertex data into the buffer
+// You can now simply memcpy the vertex data to the mapped memory and unmap it again using
+// vkUnmapMemory. Unfortunately the driver may not immediately copy the data into the buffer
+// memory, for example because of caching. It is also possible that writes to the buffer are
+// not visible in the mapped memory yet. There are two ways to deal with that problem:
+//  - Use a memory heap that is host coherent, indicated with
+//  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+//  - Call vkFlushMappedMemoryRanges to after writing to the mapped memory, and call
+//  vkInvalidateMappedMemoryRanges before reading from the mapped memory
+// We went for the first approach, which ensures that the mapped memory always matches the
+// contents of the allocated memory. Do keep in mind that this may lead to slightly worse
+// performance than explicit flushing, but we'll see why that doesn't matter in the next
+// chapter.
+// {
+//     void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
+//     std::memcpy(data, triangle_vertices.data(), size);
+//     m_device.unmapMemory(stagingbuffermemory);
+// }
 
-        // Now we copy the triangle vertex data into the buffer
-        // You can now simply memcpy the vertex data to the mapped memory and unmap it again using
-        // vkUnmapMemory. Unfortunately the driver may not immediately copy the data into the buffer
-        // memory, for example because of caching. It is also possible that writes to the buffer are
-        // not visible in the mapped memory yet. There are two ways to deal with that problem:
-        //  - Use a memory heap that is host coherent, indicated with
-        //  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        //  - Call vkFlushMappedMemoryRanges to after writing to the mapped memory, and call
-        //  vkInvalidateMappedMemoryRanges before reading from the mapped memory
-        // We went for the first approach, which ensures that the mapped memory always matches the
-        // contents of the allocated memory. Do keep in mind that this may lead to slightly worse
-        // performance than explicit flushing, but we'll see why that doesn't matter in the next
-        // chapter.
-        // {
-        //     void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
-        //     std::memcpy(data, triangle_vertices.data(), size);
-        //     m_device.unmapMemory(stagingbuffermemory);
-        // }
+withMappedMemory(stagingbuffermemory, 0, size,
+                 [=](void* data) { std::memcpy(data, mesh.vertices.data(), size); });
 
-        withMappedMemory(stagingbuffermemory, 0, size,
-                         [=](void* data) { std::memcpy(data, mesh.vertices.data(), size); });
+// The vertexBuffer is now allocated from a memory type that is device local, which
+// generally means that we're not able to use vkMapMemory. However, we can copy data from
+// the stagingBuffer to the vertexBuffer (using copyBuffer()). We have to indicate that we
+// intend to do that by specifying the transfer source flag for the stagingBuffer and the
+// transfer destination flag for the vertexBuffer, along with the vertex buffer usage flag.
+std::tie(mesh.vertex_buffer, mesh.vertex_buffer_memory) = createBuffer(
+  size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
+  vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-        // The vertexBuffer is now allocated from a memory type that is device local, which
-        // generally means that we're not able to use vkMapMemory. However, we can copy data from
-        // the stagingBuffer to the vertexBuffer (using copyBuffer()). We have to indicate that we
-        // intend to do that by specifying the transfer source flag for the stagingBuffer and the
-        // transfer destination flag for the vertexBuffer, along with the vertex buffer usage flag.
-        std::tie(mesh.vertex_buffer, mesh.vertex_buffer_memory) = createBuffer(
-          size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-          vk::MemoryPropertyFlagBits::eDeviceLocal);
+copyBuffer(stagingbuffer, &mesh.vertex_buffer, size);
 
-        copyBuffer(stagingbuffer, &mesh.vertex_buffer, size);
+m_device.destroyBuffer(stagingbuffer);
+m_device.freeMemory(stagingbuffermemory);
 
-        m_device.destroyBuffer(stagingbuffer);
-        m_device.freeMemory(stagingbuffermemory);
-
-        // All that remains now is binding the vertex buffer during rendering operations.
+// All that remains now is binding the vertex buffer during rendering operations.
+        */
     }
 }
 
@@ -1737,38 +1739,39 @@ renderer::createVertexBuffer()
 We do exactly the same thing we did for createVertexBuffer and do it for indices instead
 */
 void
-renderer::createIndexBuffer()
+renderer::createIndexBuffers()
 {
     for (auto& mesh : m_meshes) {
+        /*
+vk::DeviceSize size = sizeof(decltype(mesh.indices)::value_type) * mesh.indices.size();
 
-        vk::DeviceSize size = sizeof(decltype(mesh.indices)::value_type) * mesh.indices.size();
+// vk::Buffer       stagingbuffer;
+// vk::DeviceMemory stagingbuffermemory;
 
-        // vk::Buffer       stagingbuffer;
-        // vk::DeviceMemory stagingbuffermemory;
+auto [stagingbuffer, stagingbuffermemory] = createBuffer(
+  size, vk::BufferUsageFlagBits::eTransferSrc,
+  vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-        auto [stagingbuffer, stagingbuffermemory] = createBuffer(
-          size, vk::BufferUsageFlagBits::eTransferSrc,
-          vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+// {
+//     void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
+//     std::memcpy(data, triangle_indices.data(), size);
+//     m_device.unmapMemory(stagingbuffermemory);
+// }
 
-        // {
-        //     void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
-        //     std::memcpy(data, triangle_indices.data(), size);
-        //     m_device.unmapMemory(stagingbuffermemory);
-        // }
+withMappedMemory(stagingbuffermemory, 0, size,
+                 [=](void* data) { std::memcpy(data, mesh.indices.data(), size); });
 
-        withMappedMemory(stagingbuffermemory, 0, size,
-                         [=](void* data) { std::memcpy(data, mesh.indices.data(), size); });
+std::tie(mesh.index_buffer, mesh.index_buffer_memory) = createBuffer(
+  size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
+  vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-        std::tie(mesh.index_buffer, mesh.index_buffer_memory) = createBuffer(
-          size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
-          vk::MemoryPropertyFlagBits::eDeviceLocal);
+copyBuffer(stagingbuffer, &mesh.index_buffer, size);
 
-        copyBuffer(stagingbuffer, &mesh.index_buffer, size);
+m_device.destroyBuffer(stagingbuffer);
+m_device.freeMemory(stagingbuffermemory);
 
-        m_device.destroyBuffer(stagingbuffer);
-        m_device.freeMemory(stagingbuffermemory);
-
-        // All that remains now is binding the index buffer during rendering operations.
+// All that remains now is binding the index buffer during rendering operations.
+        */
     }
 }
 
@@ -1776,7 +1779,7 @@ renderer::createIndexBuffer()
 Much like vertex and index buffers, we have a buffer for uniform values
 */
 void
-renderer::createUniformBuffer()
+renderer::createUniformBuffers()
 {
     vk::DeviceSize buffersize = sizeof(uniformbufferobject);
 
@@ -1784,12 +1787,104 @@ renderer::createUniformBuffer()
       buffersize, vk::BufferUsageFlagBits::eUniformBuffer,
       vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
+    /*
+for (auto& mesh : m_meshes) {
+    std::tie(mesh.uniform_buffer, mesh.uniform_buffer_memory) = createBuffer(
+      buffersize, vk::BufferUsageFlagBits::eUniformBuffer,
+      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+}*/
+}
 
-    for (auto& mesh : m_meshes) {
-        std::tie(mesh.uniform_buffer, mesh.uniform_buffer_memory) = createBuffer(
-          buffersize, vk::BufferUsageFlagBits::eUniformBuffer,
-          vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-    }
+void
+renderer::createVertexBuffer(Mesh& mesh, const std::vector<Vertex> vertices)
+{
+    vk::DeviceSize size = sizeof(decltype(vertices)::value_type) * vertices.size();
+
+    // vk::Buffer       stagingbuffer;
+    // vk::DeviceMemory stagingbuffermemory;
+
+    auto [stagingbuffer, stagingbuffermemory] = createBuffer(
+      size, vk::BufferUsageFlagBits::eTransferSrc,
+      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+    // Now we copy the triangle vertex data into the buffer
+    // You can now simply memcpy the vertex data to the mapped memory and unmap it again using
+    // vkUnmapMemory. Unfortunately the driver may not immediately copy the data into the buffer
+    // memory, for example because of caching. It is also possible that writes to the buffer are
+    // not visible in the mapped memory yet. There are two ways to deal with that problem:
+    //  - Use a memory heap that is host coherent, indicated with
+    //  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    //  - Call vkFlushMappedMemoryRanges to after writing to the mapped memory, and call
+    //  vkInvalidateMappedMemoryRanges before reading from the mapped memory
+    // We went for the first approach, which ensures that the mapped memory always matches the
+    // contents of the allocated memory. Do keep in mind that this may lead to slightly worse
+    // performance than explicit flushing, but we'll see why that doesn't matter in the next
+    // chapter.
+    // {
+    //     void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
+    //     std::memcpy(data, triangle_vertices.data(), size);
+    //     m_device.unmapMemory(stagingbuffermemory);
+    // }
+
+    withMappedMemory(stagingbuffermemory, 0, size,
+                     [=](void* data) { std::memcpy(data, vertices.data(), size); });
+
+    // The vertexBuffer is now allocated from a memory type that is device local, which
+    // generally means that we're not able to use vkMapMemory. However, we can copy data from
+    // the stagingBuffer to the vertexBuffer (using copyBuffer()). We have to indicate that we
+    // intend to do that by specifying the transfer source flag for the stagingBuffer and the
+    // transfer destination flag for the vertexBuffer, along with the vertex buffer usage flag.
+    std::tie(mesh.vertex_buffer, mesh.vertex_buffer_memory) = createBuffer(
+      size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
+      vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+    copyBuffer(stagingbuffer, &mesh.vertex_buffer, size);
+
+    m_device.destroyBuffer(stagingbuffer);
+    m_device.freeMemory(stagingbuffermemory);
+
+    // All that remains now is binding the vertex buffer during rendering operations.
+}
+
+void
+renderer::createIndexBuffer(Mesh& mesh, const std::vector<uint32_t> indices)
+{
+    vk::DeviceSize size = sizeof(decltype(indices)::value_type) * indices.size();
+
+    // vk::Buffer       stagingbuffer;
+    // vk::DeviceMemory stagingbuffermemory;
+
+    auto [stagingbuffer, stagingbuffermemory] = createBuffer(
+      size, vk::BufferUsageFlagBits::eTransferSrc,
+      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+    // {
+    //     void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
+    //     std::memcpy(data, triangle_indices.data(), size);
+    //     m_device.unmapMemory(stagingbuffermemory);
+    // }
+
+    withMappedMemory(stagingbuffermemory, 0, size,
+                     [=](void* data) { std::memcpy(data, indices.data(), size); });
+
+    std::tie(mesh.index_buffer, mesh.index_buffer_memory) = createBuffer(
+      size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
+      vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+    copyBuffer(stagingbuffer, &mesh.index_buffer, size);
+
+    m_device.destroyBuffer(stagingbuffer);
+    m_device.freeMemory(stagingbuffermemory);
+
+    // All that remains now is binding the index buffer during rendering operations.
+}
+
+void
+renderer::createUniformBuffer(Mesh& mesh, const vk::DeviceSize buffersize)
+{
+    std::tie(mesh.uniform_buffer, mesh.uniform_buffer_memory) = createBuffer(
+      buffersize, vk::BufferUsageFlagBits::eUniformBuffer,
+      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 }
 
 
@@ -2236,6 +2331,10 @@ renderer::loadObj(std::string objpath) const
         throw std::runtime_error("failed to load Obj!");
     }
     Mesh objMesh;
+
+    std::vector<Vertex>   vertices;
+    std::vector<uint32_t> indices;
+
     for (const auto& shape : shapes) {
         for (const auto& index : shape.mesh.indices) {
             Vertex vertex = {};
@@ -2249,16 +2348,16 @@ renderer::loadObj(std::string objpath) const
 
             vertex.color = { 1.0f, 1.0f, 1.0f, 1.0f };
 
-            objMesh.vertices.push_back(vertex);
-            size_t sze = objMesh.indices.size();
-            objMesh.indices.push_back(objMesh.indices.size());
+            vertices.push_back(vertex);
+            size_t sze = indices.size();
+            indices.push_back(indices.size());
         }
     }
     return objMesh;
 }
 
 Mesh
-renderer::loadFbx(std::string fbxpath) const
+renderer::loadFbx(std::string fbxpath)
 {
     const aiScene* pScene =
       aiImportFile(fbxpath.c_str(), aiProcessPreset_TargetRealtime_MaxQuality);
@@ -2273,6 +2372,9 @@ renderer::loadFbx(std::string fbxpath) const
 
     std::vector<float>    vertexBuffer;
     std::vector<uint32_t> indexBuffer;
+
+    std::vector<Vertex>   newVertices;
+    std::vector<uint32_t> newIndices;
 
     // int  mesh_count     = pScene->mNumMeshes; TODO: Uncomment this when we load more than the
     // first mesh
@@ -2320,8 +2422,7 @@ renderer::loadFbx(std::string fbxpath) const
             // Just adding the normals portion for posterity.
             // We don't actually need it right now.
             if (normals != nullptr) {
-                // newMesh.vertices[ii].normal = glm::vec3(normals[ii].x, normals[ii].y,
-                // normals[ii].z);
+                vertex.normal = glm::vec3(normals[ii].x, normals[ii].y, normals[ii].z);
             }
             // Set uv of vertex
             auto uvs = (pMesh->HasTextureCoords(0)) ? &(pMesh->mTextureCoords[0][ii]) : &Zero3D;
@@ -2332,22 +2433,29 @@ renderer::loadFbx(std::string fbxpath) const
             }
 
             // Save the vertex to Mesh
-            newMesh.vertices.push_back(vertex);
+            newVertices.push_back(vertex);
         }
 
-        uint32_t indexBase = static_cast<uint32_t>(newMesh.indices.size());
+        uint32_t indexBase = static_cast<uint32_t>(newIndices.size());
         for (unsigned int ii = 0; ii < pMesh->mNumFaces; ++ii) {
             const aiFace& Face = pMesh->mFaces[ii];
             if (Face.mNumIndices != 3) {
                 continue;
             }
-            newMesh.indices.push_back(indexBase + Face.mIndices[0]);
-            newMesh.indices.push_back(indexBase + Face.mIndices[1]);
-            newMesh.indices.push_back(indexBase + Face.mIndices[2]);
+            newIndices.push_back(indexBase + Face.mIndices[0]);
+            newIndices.push_back(indexBase + Face.mIndices[1]);
+            newIndices.push_back(indexBase + Face.mIndices[2]);
             indexCount += 3;
         }
     }
     // TEMP HELPER FUNCTION LOCATION END
+
+    // Test the three buffer creations here
+    newMesh.num_indices  = (uint32_t)newIndices.size();
+    newMesh.num_vertices = (uint32_t)newVertices.size();
+    createVertexBuffer(newMesh, newVertices);
+    createIndexBuffer(newMesh, newIndices);
+    createUniformBuffer(newMesh, sizeof(uniformbufferobject));
 
     return newMesh;
 }
@@ -2772,10 +2880,11 @@ renderer::initVulkan()
     createFramebuffers();
     // Might want to move everything below this line to some other helper function
     loadAssets();
-    // loadModels();  // TODO: EVENTUALLY LOADS A LIST
-    createVertexBuffer();
-    createIndexBuffer();
-    createUniformBuffer();
+    // TODO: Instead of looping through all meshed for each function,
+    // call the individual ones as part of loading each model.
+    createVertexBuffers();
+    createIndexBuffers();
+    createUniformBuffers();
     // Setup Descriptors
     createDescriptorPool();
     createDescriptorSet();

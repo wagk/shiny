@@ -24,6 +24,7 @@ struct uniformbufferobject
     glm::mat4 model;
     glm::mat4 view;
     glm::mat4 proj;
+    glm::vec4 lightPos = glm::vec4(5.0f, 5.0f, 5.0f, 1.0f);
 };
 
 struct Vertex
@@ -31,6 +32,7 @@ struct Vertex
     glm::vec3 pos;
     glm::vec4 color;
     glm::vec2 texcoord;
+    glm::vec3 normal;
 
     static vk::VertexInputBindingDescription                  getBindingDescription();
     static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescription();
@@ -39,15 +41,10 @@ struct Vertex
 struct Mesh
 {
     Mesh() {}
-    Mesh(std::vector<Vertex> verticesIn, std::vector<uint32_t> indicesIn)
-    {
-        vertices = verticesIn;
-        indices  = indicesIn;
-    }
     uniformbufferobject      matrices;
     vk::Device*              device;
-    std::vector<Vertex>      vertices;
-    std::vector<uint32_t>    indices;
+    uint32_t                 num_vertices;
+    uint32_t                 num_indices;
     vk::Buffer               vertex_buffer;
     vk::Buffer               index_buffer;
     vk::Buffer               uniform_buffer;
@@ -106,9 +103,17 @@ private:
     void createSemaphores();
     void createFences();
 
-    void createVertexBuffer();
-    void createIndexBuffer();
-    void createUniformBuffer();
+    // TODO: These functions are deprecated. Delete in the next commit
+    void createVertexBuffers();
+    void createIndexBuffers();
+    void createUniformBuffers();
+
+    // These are the functions called for each mesh
+    void createVertexBuffer(Mesh& mesh, const std::vector<Vertex> vertices);
+    void createIndexBuffer(Mesh& mesh, const std::vector<uint32_t> indices);
+    void createUniformBuffer(Mesh& mesh, const vk::DeviceSize buffersize);
+
+    void prepareInstanceData();
 
     void updateUniformBuffer();
 
@@ -130,7 +135,7 @@ private:
 
     void loadModels(std::vector<std::string> filenames);
     Mesh loadObj(std::string objpath) const;
-    Mesh loadFbx(std::string fbxpath) const;
+    Mesh loadFbx(std::string fbxpath);
 
     void loadTextures(std::vector<std::string> filenames);
 
