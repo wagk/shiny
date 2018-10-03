@@ -571,7 +571,7 @@ description struct describes how to extract a vertex attribute from a chunk of v
 originating from a binding description. We have two attributes, position and color, so we need two
 attribute description structs.
 */
-std::array<vk::VertexInputAttributeDescription, 3>
+std::array<vk::VertexInputAttributeDescription, 4>
 Vertex::getAttributeDescription()
 {
     return {
@@ -608,14 +608,20 @@ Vertex::getAttributeDescription()
         vk::VertexInputAttributeDescription()
           .setBinding(0)
           .setLocation(1)
-          .setFormat(vk::Format::eR32G32B32Sfloat)
+          .setFormat(vk::Format::eR32G32B32A32Sfloat)
           .setOffset(offsetof(Vertex, color)),
         /*TexCoord Description*/
         vk::VertexInputAttributeDescription()
           .setBinding(0)
           .setLocation(2)
           .setFormat(vk::Format::eR32G32Sfloat)
-          .setOffset(offsetof(Vertex, texcoord))
+          .setOffset(offsetof(Vertex, texcoord)),
+        /*Normal Description*/
+        vk::VertexInputAttributeDescription()
+          .setBinding(0)
+          .setLocation(3)
+          .setFormat(vk::Format::eR32G32B32Sfloat)
+          .setOffset(offsetof(Vertex, normal))
     };
 }
 
@@ -1155,6 +1161,129 @@ https://vulkan-tutorial.com/Drawing_a_triangle/Graphics_pipeline_basics/Fixed_fu
 void
 renderer::createGraphicsPipeline()
 {
+    // The VkPipelineInputAssemblyStateCreateInfo struct describes two things: what kind of geometry
+    // will be drawn from the vertices and if primitive restart should be enabled.
+    auto inputassembly = vk::PipelineInputAssemblyStateCreateInfo()
+                           .setTopology(vk::PrimitiveTopology::eTriangleList)
+                           .setPrimitiveRestartEnable(false);
+
+    // rasterisation
+    // The rasterizer takes the geometry that is shaped by the vertices from the vertex shader and
+    // turns it into fragments to be colored by the fragment shader. It also performs depth testing,
+    // face culling and the scissor test, and it can be configured to output fragments that fill
+    // entire polygons or just the edges (wireframe rendering). All this is configured using the
+    // VkPipelineRasterizationStateCreateInfo structure.
+    auto rasterizer =
+      vk::PipelineRasterizationStateCreateInfo()
+        // If depthClampEnable is set to VK_TRUE, then fragments that are beyond the near and far
+        // planes are clamped to them as opposed to discarding them. This is useful in some special
+        // cases like shadow maps. Using this requires enabling a GPU feature.
+        .setDepthClampEnable(false)
+        // If rasterizerDiscardEnable is set to VK_TRUE, then geometry never passes through the
+        // rasterizer stage. This basically disables any output to the framebuffer.
+        .setRasterizerDiscardEnable(false)
+        // The polygonMode determines how fragments are generated for geometry. The following modes
+        // are available:
+        //    VK_POLYGON_MODE_FILL: fill the area of the polygon with fragments
+        //    VK_POLYGON_MODE_LINE: polygon edges are drawn as lines
+        //    VK_POLYGON_MODE_POINT: polygon vertices are drawn as points
+        // Using any mode other than fill requires enabling a GPU feature.
+        .setPolygonMode(vk::PolygonMode::eFill)
+        // The lineWidth member is straightforward, it describes the thickness of lines in terms of
+        // number of fragments. The maximum line width that is supported depends on the hardware and
+        // any line thicker than 1.0f requires you to enable the wideLines GPU feature.
+        .setLineWidth(1.f)
+        // The cullMode variable determines the type of face culling to use. You can disable
+        // culling, cull the front faces, cull the back faces or both.
+        .setCullMode(vk::CullModeFlagBits::eBack)
+        // The frontFace variable specifies the vertex order for faces to be considered front-facing
+        // and can be clockwise or counterclockwise.
+        .setFrontFace(vk::FrontFace::eCounterClockwise)
+        // The rasterizer can alter the depth values by adding a constant value or biasing them
+        // based on a fragment's slope. This is sometimes used for shadow mapping, but we won't be
+        // using it.
+        .setDepthBiasEnable(false);
+
+    // Contains configuration per attached framebuffer
+    auto colorblendattachment =
+      vk::PipelineColorBlendAttachmentState()
+        .setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG
+                           | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA)
+        .setBlendEnable(false);
+
+    // VkPipelineColorBlendStateCreateInfo references the array of structures for all of the
+    // framebuffers and allows you to set blend constants that you can use as blend factors in the
+    // aforementioned calculations.
+    // If you want to use the second method of blending (bitwise combination), then you should set
+    // logicOpEnable to VK_TRUE. The bitwise operation can then be specified in the logicOp field.
+    // Note that this will automatically disable the first method, as if you had set blendEnable to
+    // VK_FALSE for every attached framebuffer! The colorWriteMask will also be used in this mode to
+    // determine which channels in the framebuffer will actually be affected. It is also possible to
+    // disable both modes, as we've done here, in which case the fragment colors will be written to
+    // the framebuffer unmodified.
+    auto colorblending = vk::PipelineColorBlendStateCreateInfo()
+                           .setLogicOpEnable(false)
+                           .setAttachmentCount(1)
+                           .setPAttachments(&colorblendattachment);
+
+    /*The depth attachment is ready to be used now, but depth testing still needs to be enabled in
+     * the graphics pipeline. It is configured through the VkPipelineDepthStencilStateCreateInfo
+     * struct:
+     * The depthTestEnable field specifies if the depth of new fragments should be compared to the
+     * depth buffer to see if they should be discarded. The depthWriteEnable field specifies if the
+     * new depth of fragments that pass the depth test should actually be written to the depth
+     * buffer. This is useful for drawing transparent objects. They should be compared to the
+     * previously rendered opaque objects, but not cause further away transparent objects to not be
+     * drawn.*/
+    auto depthstencil = vk::PipelineDepthStencilStateCreateInfo()
+                          .setDepthTestEnable(true)
+                          .setDepthWriteEnable(true)
+                          .setDepthCompareOp(vk::CompareOp::eLess)
+                          .setDepthBoundsTestEnable(false)
+                          .setMinDepthBounds(0.0f)  // optional for now
+                          .setMaxDepthBounds(1.0f)  // optional for now
+                          .setStencilTestEnable(false)
+                          .setFront(vk::StencilOpState())  // optional for now
+                          .setBack(vk::StencilOpState());  // optional for now
+
+    // A viewport basically describes the region of the framebuffer that the output will be rendered
+    // to. This will almost always be (0, 0) to (width, height)
+    auto viewport = vk::Viewport()
+                      .setX(0.f)
+                      .setY(0.f)
+                      .setWidth((float)m_swapchain_extent.width)
+                      .setHeight((float)m_swapchain_extent.height)
+                      .setMinDepth(0.f)
+                      .setMaxDepth(1.f);
+
+    // While viewports define the transformation from the image to the framebuffer, scissor
+    // rectangles define in which regions pixels will actually be stored. Any pixels outside the
+    // scissor rectangles will be discarded by the rasterizer. They function like a filter rather
+    // than a transformation.
+    auto scissor = vk::Rect2D{ vk::Offset2D{ 0, 0 }, m_swapchain_extent };
+
+    // Now this viewport and scissor rectangle need to be combined into a viewport state using the
+    // VkPipelineViewportStateCreateInfo struct. It is possible to use multiple viewports and
+    // scissor rectangles on some graphics cards, so its members reference an array of them. Using
+    // multiple requires enabling a GPU feature (see logical device creation).
+    auto viewportstate = vk::PipelineViewportStateCreateInfo()
+                           .setViewportCount(1)
+                           .setPViewports(&viewport)
+                           .setScissorCount(1)
+                           .setPScissors(&scissor);
+
+    // The VkPipelineMultisampleStateCreateInfo struct configures multisampling, which is one of the
+    // ways to perform anti-aliasing. It works by combining the fragment shader results of multiple
+    // polygons that rasterize to the same pixel. This mainly occurs along edges, which is also
+    // where the most noticeable aliasing artifacts occur. Because it doesn't need to run the
+    // fragment shader multiple times if only one polygon maps to a pixel, it is significantly less
+    // expensive than simply rendering to a higher resolution and then downscaling. Enabling it
+    // requires enabling a GPU feature (We don't).
+    auto multisampling = vk::PipelineMultisampleStateCreateInfo()
+                           .setSampleShadingEnable(false)
+                           .setRasterizationSamples(vk::SampleCountFlagBits::e1);
+
+    // Shader stuff
     auto vertshadercode = readFile("shaders/phongvert.spv");
     auto fragshadercode = readFile("shaders/phongfrag.spv");
 
@@ -1194,105 +1323,6 @@ renderer::createGraphicsPipeline()
         .setVertexAttributeDescriptionCount((uint32_t)attributedescriptions.size())
         .setPVertexAttributeDescriptions(attributedescriptions.data());
 
-    // The VkPipelineInputAssemblyStateCreateInfo struct describes two things: what kind of geometry
-    // will be drawn from the vertices and if primitive restart should be enabled.
-    auto inputassembly = vk::PipelineInputAssemblyStateCreateInfo()
-                           .setTopology(vk::PrimitiveTopology::eTriangleList)
-                           .setPrimitiveRestartEnable(false);
-
-    // A viewport basically describes the region of the framebuffer that the output will be rendered
-    // to. This will almost always be (0, 0) to (width, height)
-    auto viewport = vk::Viewport()
-                      .setX(0.f)
-                      .setY(0.f)
-                      .setWidth((float)m_swapchain_extent.width)
-                      .setHeight((float)m_swapchain_extent.height)
-                      .setMinDepth(0.f)
-                      .setMaxDepth(1.f);
-
-    // While viewports define the transformation from the image to the framebuffer, scissor
-    // rectangles define in which regions pixels will actually be stored. Any pixels outside the
-    // scissor rectangles will be discarded by the rasterizer. They function like a filter rather
-    // than a transformation.
-    auto scissor = vk::Rect2D{ vk::Offset2D{ 0, 0 }, m_swapchain_extent };
-
-    // Now this viewport and scissor rectangle need to be combined into a viewport state using the
-    // VkPipelineViewportStateCreateInfo struct. It is possible to use multiple viewports and
-    // scissor rectangles on some graphics cards, so its members reference an array of them. Using
-    // multiple requires enabling a GPU feature (see logical device creation).
-    auto viewportstate = vk::PipelineViewportStateCreateInfo()
-                           .setViewportCount(1)
-                           .setPViewports(&viewport)
-                           .setScissorCount(1)
-                           .setPScissors(&scissor);
-
-    // rasterisation
-    // The rasterizer takes the geometry that is shaped by the vertices from the vertex shader and
-    // turns it into fragments to be colored by the fragment shader. It also performs depth testing,
-    // face culling and the scissor test, and it can be configured to output fragments that fill
-    // entire polygons or just the edges (wireframe rendering). All this is configured using the
-    // VkPipelineRasterizationStateCreateInfo structure.
-    auto rasterizer =
-      vk::PipelineRasterizationStateCreateInfo()
-        // If depthClampEnable is set to VK_TRUE, then fragments that are beyond the near and far
-        // planes are clamped to them as opposed to discarding them. This is useful in some special
-        // cases like shadow maps. Using this requires enabling a GPU feature.
-        .setDepthClampEnable(false)
-        // If rasterizerDiscardEnable is set to VK_TRUE, then geometry never passes through the
-        // rasterizer stage. This basically disables any output to the framebuffer.
-        .setRasterizerDiscardEnable(false)
-        // The polygonMode determines how fragments are generated for geometry. The following modes
-        // are available:
-        //    VK_POLYGON_MODE_FILL: fill the area of the polygon with fragments
-        //    VK_POLYGON_MODE_LINE: polygon edges are drawn as lines
-        //    VK_POLYGON_MODE_POINT: polygon vertices are drawn as points
-        // Using any mode other than fill requires enabling a GPU feature.
-        .setPolygonMode(vk::PolygonMode::eFill)
-        // The lineWidth member is straightforward, it describes the thickness of lines in terms of
-        // number of fragments. The maximum line width that is supported depends on the hardware and
-        // any line thicker than 1.0f requires you to enable the wideLines GPU feature.
-        .setLineWidth(1.f)
-        // The cullMode variable determines the type of face culling to use. You can disable
-        // culling, cull the front faces, cull the back faces or both.
-        .setCullMode(vk::CullModeFlagBits::eBack)
-        // The frontFace variable specifies the vertex order for faces to be considered front-facing
-        // and can be clockwise or counterclockwise.
-        .setFrontFace(vk::FrontFace::eCounterClockwise)
-        // The rasterizer can alter the depth values by adding a constant value or biasing them
-        // based on a fragment's slope. This is sometimes used for shadow mapping, but we won't be
-        // using it.
-        .setDepthBiasEnable(false);
-
-    // The VkPipelineMultisampleStateCreateInfo struct configures multisampling, which is one of the
-    // ways to perform anti-aliasing. It works by combining the fragment shader results of multiple
-    // polygons that rasterize to the same pixel. This mainly occurs along edges, which is also
-    // where the most noticeable aliasing artifacts occur. Because it doesn't need to run the
-    // fragment shader multiple times if only one polygon maps to a pixel, it is significantly less
-    // expensive than simply rendering to a higher resolution and then downscaling. Enabling it
-    // requires enabling a GPU feature (We don't).
-    auto multisampling = vk::PipelineMultisampleStateCreateInfo()
-                           .setSampleShadingEnable(false)
-                           .setRasterizationSamples(vk::SampleCountFlagBits::e1);
-
-    /*The depth attachment is ready to be used now, but depth testing still needs to be enabled in
-     * the graphics pipeline. It is configured through the VkPipelineDepthStencilStateCreateInfo
-     * struct:
-     * The depthTestEnable field specifies if the depth of new fragments should be compared to the
-     * depth buffer to see if they should be discarded. The depthWriteEnable field specifies if the
-     * new depth of fragments that pass the depth test should actually be written to the depth
-     * buffer. This is useful for drawing transparent objects. They should be compared to the
-     * previously rendered opaque objects, but not cause further away transparent objects to not be
-     * drawn.*/
-    auto depthstencil = vk::PipelineDepthStencilStateCreateInfo()
-                          .setDepthTestEnable(true)
-                          .setDepthWriteEnable(true)
-                          .setDepthCompareOp(vk::CompareOp::eLess)
-                          .setDepthBoundsTestEnable(false)
-                          .setMinDepthBounds(0.0f)  // optional for now
-                          .setMaxDepthBounds(1.0f)  // optional for now
-                          .setStencilTestEnable(false)
-                          .setFront(vk::StencilOpState())  // optional for now
-                          .setBack(vk::StencilOpState());  // optional for now
 
     // After a fragment shader has returned a color, it needs to be combined with the color that is
     // already in the framebuffer. This transformation is known as color blending and there are two
@@ -1300,27 +1330,6 @@ renderer::createGraphicsPipeline()
     //  - Mix the old and new value to produce a final color
     //  - Combine the old and new value using a bitwise operation
 
-    // Contains configuration per attached framebuffer
-    auto colorblendattachment =
-      vk::PipelineColorBlendAttachmentState()
-        .setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG
-                           | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA)
-        .setBlendEnable(false);
-
-    // VkPipelineColorBlendStateCreateInfo references the array of structures for all of the
-    // framebuffers and allows you to set blend constants that you can use as blend factors in the
-    // aforementioned calculations.
-    // If you want to use the second method of blending (bitwise combination), then you should set
-    // logicOpEnable to VK_TRUE. The bitwise operation can then be specified in the logicOp field.
-    // Note that this will automatically disable the first method, as if you had set blendEnable to
-    // VK_FALSE for every attached framebuffer! The colorWriteMask will also be used in this mode to
-    // determine which channels in the framebuffer will actually be affected. It is also possible to
-    // disable both modes, as we've done here, in which case the fragment colors will be written to
-    // the framebuffer unmodified.
-    auto colorblending = vk::PipelineColorBlendStateCreateInfo()
-                           .setLogicOpEnable(false)
-                           .setAttachmentCount(1)
-                           .setPAttachments(&colorblendattachment);
 
     // A limited amount of the state that we've specified in the previous structs can actually be
     // changed without recreating the pipeline. Examples are the size of the viewport, line width
@@ -1342,7 +1351,7 @@ renderer::createGraphicsPipeline()
 
     auto pipelinecreateinfo =
       vk::GraphicsPipelineCreateInfo()
-        .setStageCount(2)
+        .setStageCount(shaderstages.size())
         .setPStages(shaderstages.data())
         .setPVertexInputState(&vertexinputinfo)
         .setPInputAssemblyState(&inputassembly)
@@ -2419,8 +2428,6 @@ renderer::loadFbx(std::string fbxpath)
             }*/
 
             // Set normal of vertex
-            // Just adding the normals portion for posterity.
-            // We don't actually need it right now.
             if (normals != nullptr) {
                 vertex.normal = glm::vec3(normals[ii].x, normals[ii].y, normals[ii].z);
             }

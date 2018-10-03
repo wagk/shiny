@@ -35,7 +35,7 @@ struct Vertex
     glm::vec3 normal;
 
     static vk::VertexInputBindingDescription                  getBindingDescription();
-    static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescription();
+    static std::array<vk::VertexInputAttributeDescription, 4> getAttributeDescription();
 };
 
 struct Mesh

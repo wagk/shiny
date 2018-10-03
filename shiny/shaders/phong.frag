@@ -17,10 +17,10 @@ void main() {
 	vec3 L = normalize(fragLightVec);
 	vec3 V = normalize(fragViewVec);
 	vec3 R = reflect(-L, N);
-	vec3 diffuse = max(dot(N,L), 0.0) * fragColor;
+	vec3 diffuse = fragColor * max(dot(N,L), 0.0);
 	vec3 specular = pow(max(dot(R,V), 0.0), 4.0) * vec3(0.5) * color.r;
-	//outColor = vec4(diffuse * color.rgb + specular, 1.0);
-	outColor = color;
+	outColor = vec4(diffuse * color.rgb + specular, 1.0);
+	//outColor = color;
 	//outColor = vec4(diffuse, 1.0);
 	
 	//Just the texture image
