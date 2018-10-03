@@ -1,4 +1,4 @@
-#include "texture.h"
+#include "graphics/texture.h"
 
 void
 Texture::updateDescriptor()

@@ -7,7 +7,7 @@
 
 #include <glm/glm.hpp>
 
-#include "texture.h"
+#include "graphics/texture.h"
 
 
 namespace shiny::graphics {

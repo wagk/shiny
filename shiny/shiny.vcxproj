@@ -199,13 +199,14 @@ glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="graphics\renderer.cpp" />
+    <ClCompile Include="graphics\texture.cpp" />
     <ClCompile Include="include\glm\detail\glm.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="stdafx.cpp" />
-    <ClCompile Include="texture.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="graphics\renderer.h" />
+    <ClInclude Include="graphics\texture.h" />
     <ClInclude Include="helper.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="include\FreeImage.h" />
@@ -360,7 +361,6 @@ glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders
     <ClInclude Include="include\glm\vector_relational.hpp" />
     <ClInclude Include="include\stb_image.h" />
     <ClInclude Include="include\tiny_obj_loader.h" />
-    <ClInclude Include="texture.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="include\glm\detail\func_common.inl" />
