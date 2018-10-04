@@ -24,7 +24,10 @@ struct uniformbufferobject
     glm::mat4 model;
     glm::mat4 view;
     glm::mat4 proj;
-    glm::vec4 lightPos = glm::vec4(5.0f, 5.0f, 5.0f, 1.0f);
+    // glm::vec4 lightPos     = glm::vec4(5.0f, 5.0f, 5.0f, 1.0f);
+    glm::vec4 lightsPos[3] = { glm::vec4(7.0f, 7.0f, 7.0f, 1.0f),
+                               glm::vec4(-9.0f, 5.0f, -9.0f, 1.0f),
+                               glm::vec4(1.0f, -5.0f, 2.0f, 1.0f) };
 };
 
 struct Vertex

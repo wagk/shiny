@@ -8,7 +8,7 @@ layout(binding = 0) uniform UniformBufferObject {
   mat4 model;
   mat4 view;
   mat4 proj;
-  vec4 lightPos;
+  vec4 lightsPos[3];
 } ubo;
 
 layout(location = 0) in vec3 inPosition;
@@ -20,7 +20,7 @@ layout(location = 0) out vec3 fragColor;
 layout(location = 1) out vec2 fragTexCoord;
 layout(location = 2) out vec3 fragNormal;
 layout(location = 3) out vec3 fragViewVec;
-layout(location = 4) out vec3 fragLightVec;
+layout(location = 4) out vec3 fragLightVecs[3];
 
 out gl_PerVertex {
     vec4 gl_Position;
@@ -31,10 +31,12 @@ void main() {
 	fragTexCoord = inTexCoord;
 	//mat4 modelview = ubo.view * ubo.model;
     gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition.xyz, 1.0);
-
 	vec4 pos = ubo.view * ubo.model * vec4(inPosition.xyz, 1.0);
 	fragNormal = mat3(ubo.view * ubo.model) * inNormal;
-	vec3 lPos = mat3(ubo.view * ubo.model) * ubo.lightPos.xyz;
-	fragLightVec = lPos - pos.xyz;
 	fragViewVec = -pos.xyz;
+	for(int i = 0; i < 3; ++i)
+	{
+		vec3 lPos = mat3(ubo.view * ubo.model) * ubo.lightsPos[i].xyz;
+		fragLightVecs[i] = lPos - pos.xyz;
+	}
 }
