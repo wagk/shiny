@@ -74,6 +74,23 @@ struct Mesh
     }
 };
 
+struct FrameBufferAttachment
+{
+    vk::Image        image;
+    vk::DeviceMemory memory;
+    vk::ImageView    image_view;
+    vk::Format       format;
+};
+
+struct FrameBuffer
+{
+    int32_t               width, height;
+    vk::Framebuffer       frameBuffer;
+    FrameBufferAttachment position, normal, albedo;
+    FrameBufferAttachment depth;
+    vk::RenderPass        renderPass;
+};
+
 
 class renderer
 {
@@ -94,6 +111,7 @@ private:
     void createInstance();
     void setupDebugCallback();
     void createSurface();
+    void generateQuads();
     void pickPhysicalDevice();
     void createLogicalDevice();
     void createSwapChain();
@@ -116,6 +134,8 @@ private:
     void createIndexBuffer(Mesh& mesh, const std::vector<uint32_t> indices);
     void createUniformBuffer(Mesh& mesh, const vk::DeviceSize buffersize);
 
+    // Prepare resources
+    void prepareOffscreenFramebuffer();
     void prepareInstanceData();
 
     void updateUniformBuffer();
@@ -166,6 +186,10 @@ private:
                                   vk::Format              format,
                                   vk::ImageAspectFlagBits aspectflags) const;
 
+    void createAttachment(vk::Format             format,
+                          vk::ImageUsageFlagBits usage,
+                          FrameBufferAttachment* attachment);
+
     /* Find Format Helper Functions: Put them here due to their need for device reference */
     vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates,
                                    vk::ImageTiling                tiling,
@@ -176,6 +200,13 @@ private:
           { vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint, vk::Format::eD24UnormS8Uint },
           vk::ImageTiling::eOptimal, vk::FormatFeatureFlagBits::eDepthStencilAttachment);
     }
+
+    vk::Bool32 getSupportedDepthFormat(vk::Format* depthFormat);
+    uint32_t   getMemoryType(uint32_t                typeBits,
+                             vk::MemoryPropertyFlags properties,
+                             vk::Bool32*             memTypeFound = nullptr);
+
+    void findEnabledFeatures();
 
     bool hasStencilComponent(vk::Format format) const
     {
@@ -204,16 +235,22 @@ private:
     void recreateSwapChain();
     void cleanupSwapChain();
 
+    vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
+
     GLFWwindow* m_window = nullptr;
 
     // can't use UniqueDebugReportCallbackEXT because of
     // https://github.com/KhronosGroup/Vulkan-Hpp/issues/212
 
-    vk::Instance               m_instance;
-    vk::DebugReportCallbackEXT m_callback;
-    vk::SurfaceKHR             m_surface;
-    vk::PhysicalDevice         m_physical_device;
-    vk::Device                 m_device;
+    vk::Instance                       m_instance;
+    vk::DebugReportCallbackEXT         m_callback;
+    vk::SurfaceKHR                     m_surface;
+    vk::PhysicalDevice                 m_physical_device;
+    vk::PhysicalDeviceProperties       m_device_properties;
+    vk::PhysicalDeviceMemoryProperties m_device_memory_properties;
+    vk::PhysicalDeviceFeatures         m_device_features;
+    vk::PhysicalDeviceFeatures         m_enabled_features;
+    vk::Device                         m_device;
 
     // swapchain things
     // TODO: Find a way to turn this back into a UniqueSwapchainKHR
@@ -231,6 +268,8 @@ private:
     vk::ImageView    m_depth_image_view;
     vk::DeviceMemory m_depth_image_memory;
 
+    // TODO: These are hardcoded varibles that should exist in an asset cache.
+    // Like m_shader_cache or something. Move these there.
     vk::ShaderModule m_vertex_shader_module;
     vk::ShaderModule m_fragment_shader_module;
 
@@ -260,8 +299,10 @@ private:
     // Mesh m_mesh;
 
     // Asset Caches. TODO: use maps instead of a vector of meshes
-    uniformbufferobject camera;
+    uniformbufferobject m_camera;
+    FrameBuffer         m_offscreen_framebuffer;
     std::vector<Mesh>   m_meshes;
+    vk::Sampler         m_color_sampler;
 };
 
 /*

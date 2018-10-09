@@ -68,6 +68,9 @@ shadow map generation.
 #include <set>
 #include <vector>
 
+#define TEX_DIM 2048
+#define FB_DIM TEX_DIM
+
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
@@ -854,6 +857,10 @@ renderer::pickPhysicalDevice()
     for (const auto& device : physical_devices) {
         if (isDeviceSuitable(device, m_surface)) {
             m_physical_device = device;
+            m_physical_device.getProperties(&m_device_properties);
+            m_physical_device.getFeatures(&m_device_features);
+            m_physical_device.getMemoryProperties(&m_device_memory_properties);
+            findEnabledFeatures();
             break;
         }
     }
@@ -956,7 +963,7 @@ renderer::createSwapChain()
       .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque)
       .setPresentMode(presentmode)
       .setClipped(true)
-      .setOldSwapchain(nullptr);
+      .setOldSwapchain(m_swapchain);
 
     // m_swapchain.reset(m_device->createSwapchainKHR(createinfo));
 
@@ -1337,6 +1344,7 @@ renderer::createGraphicsPipeline()
     // VkPipelineDynamicStateCreateInfo
     // This will cause the configuration of these values to be ignored and you will be required to
     // specify the data at drawing time.
+    // auto dynamicStateInfo = vk::PipelineDynamicStateCreateInfo();
 
     // You can use uniform values in shaders, which are globals similar to dynamic state variables
     // that can be changed at drawing time to alter the behavior of your shaders without having to
@@ -1896,6 +1904,125 @@ renderer::createUniformBuffer(Mesh& mesh, const vk::DeviceSize buffersize)
       vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 }
 
+void
+renderer::prepareOffscreenFramebuffer()
+{
+    m_offscreen_framebuffer.width  = FB_DIM;
+    m_offscreen_framebuffer.height = FB_DIM;
+
+    // Color attachments
+
+    // (World space) positions
+    createAttachment(vk::Format::eR16G16B16A16Sfloat, vk::ImageUsageFlagBits::eColorAttachment,
+                     &m_offscreen_framebuffer.position);
+
+    // (World space) Normals
+    createAttachment(vk::Format::eR16G16B16A16Sfloat, vk::ImageUsageFlagBits::eColorAttachment,
+                     &m_offscreen_framebuffer.normal);
+
+    // Albedo (color)
+    createAttachment(vk::Format::eR8G8B8A8Unorm, vk::ImageUsageFlagBits::eColorAttachment,
+                     &m_offscreen_framebuffer.albedo);
+
+    // Depth attachment
+    // Find a suitable depth format
+    vk::Format attachmentDepthFormat;
+    vk::Bool32 validDepthFormat = getSupportedDepthFormat(&attachmentDepthFormat);
+    if (!validDepthFormat) {
+        throw std::runtime_error("No valid Depth Format found!\n");
+    }
+    // Then create the Depth attachment
+    createAttachment(attachmentDepthFormat, vk::ImageUsageFlagBits::eDepthStencilAttachment,
+                     &m_offscreen_framebuffer.depth);
+
+    // Set up separate renderpass with references to the color and depth attachments
+    std::array<vk::AttachmentDescription, 4> attachmentDescriptions = {};
+
+    // Init attachment properties
+    for (uint32_t i = 0; i < 4; ++i) {
+        attachmentDescriptions[i].samples        = vk::SampleCountFlagBits::e1;
+        attachmentDescriptions[i].loadOp         = vk::AttachmentLoadOp::eClear;
+        attachmentDescriptions[i].storeOp        = vk::AttachmentStoreOp::eDontCare;
+        attachmentDescriptions[i].stencilLoadOp  = vk::AttachmentLoadOp::eDontCare;
+        attachmentDescriptions[i].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        if (i == 3) {
+            attachmentDescriptions[i].initialLayout = vk::ImageLayout::eUndefined;
+            attachmentDescriptions[i].finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        } else {
+            attachmentDescriptions[i].initialLayout = vk::ImageLayout::eUndefined;
+            attachmentDescriptions[i].finalLayout   = vk::ImageLayout::eShaderReadOnlyOptimal;
+        }
+    }
+    // Formats of each attachment
+    attachmentDescriptions[0].format = m_offscreen_framebuffer.position.format;
+    attachmentDescriptions[1].format = m_offscreen_framebuffer.normal.format;
+    attachmentDescriptions[2].format = m_offscreen_framebuffer.albedo.format;
+    attachmentDescriptions[3].format = m_offscreen_framebuffer.depth.format;
+
+    std::vector<vk::AttachmentReference> colorReferences;
+    colorReferences.push_back({ 0, vk::ImageLayout::eColorAttachmentOptimal });
+    colorReferences.push_back({ 1, vk::ImageLayout::eColorAttachmentOptimal });
+    colorReferences.push_back({ 2, vk::ImageLayout::eColorAttachmentOptimal });
+
+    vk::AttachmentReference depthReference = {};
+    depthReference.attachment              = 3;
+    depthReference.layout                  = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+
+    vk::SubpassDescription subpass  = {};
+    subpass.pipelineBindPoint       = vk::PipelineBindPoint::eGraphics;
+    subpass.pColorAttachments       = colorReferences.data();
+    subpass.colorAttachmentCount    = static_cast<uint32_t>(colorReferences.size());
+    subpass.pDepthStencilAttachment = &depthReference;
+
+    // Use subpass dependencies for attachment layout transitions
+    std::array<vk::SubpassDependency, 2> dependencies;
+
+    dependencies[0]
+      .setSrcSubpass(VK_SUBPASS_EXTERNAL)
+      .setDstSubpass(0)
+      .setSrcStageMask(vk::PipelineStageFlagBits::eBottomOfPipe)
+      .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput)
+      .setSrcAccessMask(vk::AccessFlagBits::eMemoryRead)
+      .setDstAccessMask(vk::Flags(vk::AccessFlagBits::eColorAttachmentRead)
+                        | vk::Flags(vk::AccessFlagBits::eColorAttachmentWrite))
+      .setDependencyFlags(vk::DependencyFlagBits::eByRegion);
+
+    dependencies[1]
+      .setSrcSubpass(0)
+      .setDstSubpass(VK_SUBPASS_EXTERNAL)
+      .setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput)
+      .setDstStageMask(vk::PipelineStageFlagBits::eBottomOfPipe)
+      .setSrcAccessMask(vk::Flags(vk::AccessFlagBits::eColorAttachmentRead)
+                        | vk::Flags(vk::AccessFlagBits::eColorAttachmentWrite))
+      .setDstAccessMask(vk::AccessFlagBits::eMemoryRead)
+      .setDependencyFlags(vk::DependencyFlagBits::eByRegion);
+
+    vk::RenderPassCreateInfo renderPassInfo = {};
+    renderPassInfo.setPAttachments(attachmentDescriptions.data())
+      .setAttachmentCount(static_cast<uint32_t>(attachmentDescriptions.size()))
+      .setSubpassCount(1)
+      .setPSubpasses(&subpass)
+      .setDependencyCount(2)
+      .setPDependencies(dependencies.data());
+
+    m_device.createRenderPass(&renderPassInfo, nullptr, &m_offscreen_framebuffer.renderPass);
+
+    // Create Sampler to sample from the color attachments
+    vk::SamplerCreateInfo sampler = vk::SamplerCreateInfo();
+    sampler.setMagFilter(vk::Filter::eNearest)
+      .setMinFilter(vk::Filter::eNearest)
+      .setMipmapMode(vk::SamplerMipmapMode::eLinear)
+      .setAddressModeU(vk::SamplerAddressMode::eClampToEdge)
+      .setAddressModeV(sampler.addressModeU)
+      .setAddressModeW(sampler.addressModeU)
+      .setMipLodBias(0.0f)
+      .setMaxAnisotropy(1.0f)
+      .setMinLod(0.0f)
+      .setMaxLod(1.0f)
+      .setBorderColor(vk::BorderColor::eFloatOpaqueWhite);
+    m_device.createSampler(&sampler, nullptr, &m_color_sampler);
+}
+
 
 /*
 We need to provide details about every descriptor binding used in the shaders for pipeline creation,
@@ -2304,11 +2431,11 @@ void
 renderer::loadAssets()
 {
     // TEMPORARY: Camera settings here
-    camera.model;
-    camera.proj =
+    m_camera.model;
+    m_camera.proj =
       glm::lookAt(glm::vec3(0.f, 3.f, 5.f), glm::vec3(0.f, 3.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
-    camera.view = glm::ortho(-4.0f / 3.0f, 4.0f / 3.0f, -1.0f, 1.0f, -1.0f, 1.0f);
-    camera.proj[1][1] *= -1;
+    m_camera.view = glm::ortho(-4.0f / 3.0f, 4.0f / 3.0f, -1.0f, 1.0f, -1.0f, 1.0f);
+    m_camera.proj[1][1] *= -1;
 
     // Load models and Textures
     loadModels(all_model_filenames);
@@ -2797,6 +2924,48 @@ renderer::createImageView(vk::Image               image,
     return imageView;
 }
 
+void
+renderer::createAttachment(vk::Format             format,
+                           vk::ImageUsageFlagBits usage,
+                           FrameBufferAttachment* attachment)
+{
+    vk::ImageAspectFlags aspectMask;
+    vk::ImageLayout      imageLayout;
+
+    attachment->format = format;
+
+    if (usage == vk::ImageUsageFlagBits::eColorAttachment) {
+        aspectMask  = vk::ImageAspectFlagBits::eColor;
+        imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+    }
+    if (usage == vk::ImageUsageFlagBits::eDepthStencilAttachment) {
+        aspectMask  = vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
+        imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+    }
+
+    vk::ImageCreateInfo image =
+      vk::ImageCreateInfo()
+        .setImageType(vk::ImageType::e2D)
+        .setFormat(format)
+        .setExtent(vk::Extent3D(m_offscreen_framebuffer.width, m_offscreen_framebuffer.height, 1))
+        .setMipLevels(1)
+        .setArrayLayers(1)
+        .setSamples(vk::SampleCountFlagBits::e1)
+        .setTiling(vk::ImageTiling::eOptimal)
+        .setUsage(usage | vk::ImageUsageFlagBits::eSampled);
+
+    vk::MemoryAllocateInfo memAlloc = vk::MemoryAllocateInfo();
+    vk::MemoryRequirements memReqs;
+
+    m_device.createImage(&image, nullptr, &attachment->image);
+    m_device.getImageMemoryRequirements(attachment->image, &memReqs);
+    memAlloc.setAllocationSize(memReqs.size);
+    memAlloc.setMemoryTypeIndex(
+      getMemoryType(memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal));
+    m_device.allocateMemory(&memAlloc, nullptr, &attachment->memory);
+    m_device.bindImageMemory(attachment->image, attachment->memory, 0);
+}
+
 /* This function allows us to define our own list of prioritized formats, and will return the
  * first successful find based on the list of candidates. */
 vk::Format
@@ -2817,6 +2986,84 @@ renderer::findSupportedFormat(const std::vector<vk::Format>& candidates,
     }
 
     throw std::runtime_error("failed to find supported format!");
+}
+
+vk::Bool32
+renderer::getSupportedDepthFormat(vk::Format* depthFormat)
+{
+    // Since all depth formats may be optional, we need to find a suitable depth format to use
+    // Start with the highest precision packed format
+    std::vector<vk::Format> depthFormats = { vk::Format::eD32SfloatS8Uint, vk::Format::eD32Sfloat,
+                                             vk::Format::eD24UnormS8Uint,
+                                             vk::Format::eD16UnormS8Uint, vk::Format::eD16Unorm };
+
+    for (auto& format : depthFormats) {
+        vk::FormatProperties formatProps = m_physical_device.getFormatProperties(format);
+        // Format must support depth stencil attachment for optimal tiling
+        if (formatProps.optimalTilingFeatures
+            & vk::FormatFeatureFlagBits::eDepthStencilAttachment) {
+            *depthFormat = format;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+uint32_t
+renderer::getMemoryType(uint32_t                typeBits,
+                        vk::MemoryPropertyFlags properties,
+                        vk::Bool32*             memTypeFound)
+{
+    for (uint32_t i = 0; i < m_device_memory_properties.memoryTypeCount; ++i) {
+        if ((typeBits & 1) == 1) {
+            if ((m_device_memory_properties.memoryTypes[i].propertyFlags & properties)
+                == properties) {
+                if (memTypeFound) {
+                    *memTypeFound = true;
+                }
+                return i;
+            }
+        }
+        typeBits >>= 1;
+    }
+    // If we reach this point, no matching memory type was found
+    if (memTypeFound) {
+        *memTypeFound = false;
+        return 0;
+    } else {
+        throw std::runtime_error("Could not find a matching memory type");
+    }
+}
+
+void
+renderer::findEnabledFeatures()
+{
+    // Check for Anisotropic filtering
+    if (m_device_features.samplerAnisotropy) {
+        m_enabled_features.setSamplerAnisotropy(true);
+    }
+    // Check for texture compression
+    if (m_device_features.textureCompressionBC) {
+        m_enabled_features.setTextureCompressionBC(true);
+    } else if (m_device_features.textureCompressionASTC_LDR) {
+        m_enabled_features.setTextureCompressionASTC_LDR(true);
+    } else if (m_device_features.textureCompressionETC2) {
+        m_enabled_features.setTextureCompressionETC2(true);
+    }
+
+    // Geometry shading
+    if (m_device_features.geometryShader) {
+        m_enabled_features.setGeometryShader(true);
+    } else {
+        // throw std::runtime_error("Selected GPU does not support geometry shader!\n");
+    }
+
+    if (m_device_features.multiViewport) {
+        m_enabled_features.setMultiViewport(true);
+    } else {
+        // throw std::runtime_error("Selected GPU does not support multi viewports!\n");
+    }
 }
 
 /*
@@ -2867,6 +3114,27 @@ renderer::cleanupSwapChain()
     m_device.destroyRenderPass(m_render_pass);
 
     m_device.destroySwapchainKHR(m_swapchain);
+}
+
+vk::Extent2D
+renderer::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
+{
+    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+        return capabilities.currentExtent;
+    } else {
+        int width, height;
+        glfwGetFramebufferSize(m_window, &width, &height);
+
+        vk::Extent2D actualExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
+
+        actualExtent.width =
+          std::max(capabilities.minImageExtent.width,
+                   std::min(capabilities.maxImageExtent.width, actualExtent.width));
+        actualExtent.height =
+          std::max(capabilities.minImageExtent.height,
+                   std::min(capabilities.maxImageExtent.height, actualExtent.height));
+        return actualExtent;
+    }
 }
 
 void
