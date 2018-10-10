@@ -207,7 +207,7 @@ glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders
   <ItemGroup>
     <ClInclude Include="graphics\renderer.h" />
     <ClInclude Include="graphics\texture.h" />
-    <ClInclude Include="helper.h" />
+    <ClInclude Include="Resource.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="include\FreeImage.h" />
     <ClInclude Include="include\GLFW\glfw3.h" />

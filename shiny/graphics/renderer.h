@@ -3,9 +3,9 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include <vulkan/vulkan.hpp>
-
+#include <Windows.h>
 #include <glm/glm.hpp>
+#include <vulkan/vulkan.hpp>
 
 #include "graphics/texture.h"
 
@@ -235,9 +235,15 @@ private:
     void recreateSwapChain();
     void cleanupSwapChain();
 
-    vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
+    // Choose Swapchain properties
+    vk::Extent2D                  chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
+    vk::CompositeAlphaFlagBitsKHR chooseSwapAlpha(const vk::SurfaceCapabilitiesKHR& capabilities);
 
+    // Window variables
     GLFWwindow* m_window = nullptr;
+
+    int m_win_width  = 0;
+    int m_win_height = 0;
 
     // can't use UniqueDebugReportCallbackEXT because of
     // https://github.com/KhronosGroup/Vulkan-Hpp/issues/212
@@ -301,6 +307,7 @@ private:
     // Asset Caches. TODO: use maps instead of a vector of meshes
     uniformbufferobject m_camera;
     FrameBuffer         m_offscreen_framebuffer;
+    Mesh                m_offscreen_quads;
     std::vector<Mesh>   m_meshes;
     vk::Sampler         m_color_sampler;
 };

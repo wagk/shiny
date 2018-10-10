@@ -95,7 +95,7 @@ shadow map generation.
 
 namespace {
 
-const uint32_t WIDTH  = 1200;
+const uint32_t WIDTH  = 1280;
 const uint32_t HEIGHT = 800;
 
 using VulkanExtensionName = const char*;
@@ -325,12 +325,14 @@ isDeviceSuitable(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface
 /*
 if the swapChainAdequate conditions were met then the support is definitely sufficient, but there
 may still be many different modes of varying optimality. We'll now write a couple of functions to
-find the right settings for the best possible swap chain. There are three types of settings to
+find the right settings for the best possible swap chain. There are a few types of settings to
 determine:
 
     - Surface format (color depth)
     - Presentation mode (conditions for "swapping" images to the screen)
     - Swap extent (resolution of images in swap chain)
+        - Surface transform
+        - Composite Alpha
 */
 vk::SurfaceFormatKHR
 chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableformats)
@@ -403,20 +405,20 @@ setting the width and height in the currentExtent member. However, some window m
 to differ here and this is indicated by setting the width and height in currentExtent to a special
 value: the maximum value of uint32_t. In that case we'll pick the resolution that best matches the
 window within the minImageExtent and maxImageExtent bounds.
-*/
-vk::Extent2D
-chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
-{
-    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
-        return capabilities.currentExtent;
-    }
-
-    vk::Extent2D actual_extent(
-      std::clamp(WIDTH, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
-      std::clamp(HEIGHT, capabilities.minImageExtent.height, capabilities.maxImageExtent.height));
-
-    return actual_extent;
-}
+NOTE: I have commented out this function because I needed to make it a class function */
+// vk::Extent2D
+// chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
+//{
+//    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+//        return capabilities.currentExtent;
+//    }
+//
+//    vk::Extent2D actual_extent(
+//      std::clamp(WIDTH, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+//      std::clamp(HEIGHT, capabilities.minImageExtent.height, capabilities.maxImageExtent.height));
+//
+//    return actual_extent;
+//}
 
 bool
 checkValidationLayerSupport()
@@ -744,12 +746,33 @@ renderer::drawFrame()
 void
 renderer::initWindow()
 {
+    // Initialize glfw
     glfwInit();
 
+    // Address Hard Hints for glfw settings.
+    // NOTE: Hard hints are compulsory
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    // glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+    // Get parameters for size
+    GLFWmonitor* primary_monitor = glfwGetPrimaryMonitor();
 
-    m_window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+    const GLFWvidmode* mode = glfwGetVideoMode(primary_monitor);
+    // Set window size to be 3/4 of screen resolution
+    int win_width  = (mode->width / 4) * 3;
+    int win_height = (mode->height / 4) * 3;
+    m_win_width    = win_width;
+    m_win_height   = win_height;
+
+    // Initilize our window
+    // m_window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+    m_window =
+      glfwCreateWindow(win_width, win_height, "Shiny: A Vulkan Renderer", nullptr, nullptr);
+
+    // Set window position to be center of screen
+    // NOTE: origin of screenspace and windowspace are top-left corner. Y pointing down.
+    glfwSetWindowPos(m_window, (mode->width / 2) - (win_width / 2),
+                     (mode->height / 2) - (win_height / 2));
 }
 
 /*
@@ -836,6 +859,56 @@ renderer::createSurface()
         throw std::runtime_error("Failed to create window surface!");
     }
     m_surface = surface;
+}
+
+void
+renderer::generateQuads()
+{
+    std::vector<Vertex> vertexBuffer;
+
+    float x = 0.0f;
+    float y = 0.0f;
+    for (uint32_t i = 0; i < 3; i++) {
+        // Last component of normal is used for debug display sampler index
+        vertexBuffer.push_back({ { x + 1.0f, y + 1.0f, 0.0f },
+                                 { 1.0f, 1.0f, 1.0f, 1.0f },
+                                 { 1.0f, 1.0f },
+                                 { 0.0f, 0.0f, (float)i } });
+        vertexBuffer.push_back({ { x, y + 1.0f, 0.0f },
+                                 { 1.0f, 1.0f, 1.0f, 1.0f },
+                                 { 0.0f, 1.0f },
+                                 { 0.0f, 0.0f, (float)i } });
+        vertexBuffer.push_back({ { x + 0.0f, y, 0.0f },
+                                 { 1.0f, 1.0f, 1.0f, 1.0f },
+                                 { 0.0f, 0.0f },
+                                 { 0.0f, 0.0f, (float)i } });
+        vertexBuffer.push_back({ { x + 1.0f, y, 0.0f },
+                                 { 1.0f, 1.0f, 1.0f, 1.0f },
+                                 { 1.0f, 0.0f },
+                                 { 0.0f, 0.0f, (float)i } });
+        x += 1.0f;
+        if (x > 1.0f) {
+            x = 0.0f;
+            y += 1.0f;
+        }
+    }
+
+    createVertexBuffer(m_offscreen_quads, vertexBuffer);
+
+    // Setup indices
+    std::vector<uint32_t> indexBuffer = { 0, 1, 2, 2, 3, 0 };
+    for (uint32_t i = 0; i < 3; ++i) {
+        uint32_t indices[6] = { 0, 1, 2, 2, 3, 0 };
+        for (auto index : indices) {
+            indexBuffer.push_back(i * 4 + index);
+        }
+    }
+
+    m_offscreen_quads.num_indices = static_cast<uint32_t>(indexBuffer.size());
+
+    createIndexBuffer(m_offscreen_quads, indexBuffer);
+
+    m_offscreen_quads.device = &m_device;
 }
 
 /*
@@ -927,17 +1000,40 @@ https://www.khronos.org/registry/vulkan/specs/1.0-wsi_extensions/html/vkspec.htm
 void
 renderer::createSwapChain()
 {
+    auto oldSwapchain = m_swapchain;
+
     SwapChainSupportDetails support = querySwapChainSupport(m_physical_device, m_surface);
 
-    vk::SurfaceFormatKHR surfaceformat = chooseSwapSurfaceFormat(support.formats);
-    vk::PresentModeKHR   presentmode   = chooseSwapPresentMode(support.presentModes);
-    vk::Extent2D         extent        = chooseSwapExtent(support.capabilities);
+    vk::SurfaceFormatKHR          surfaceformat  = chooseSwapSurfaceFormat(support.formats);
+    vk::PresentModeKHR            presentmode    = chooseSwapPresentMode(support.presentModes);
+    vk::Extent2D                  extent         = chooseSwapExtent(support.capabilities);
+    vk::CompositeAlphaFlagBitsKHR compositeAlpha = chooseSwapAlpha(support.capabilities);
+
+    vk::Extent2D swapchainExtent = {};
+    if (support.capabilities.currentExtent.width == (uint32_t)-1) {
+        swapchainExtent.width  = m_win_width;
+        swapchainExtent.height = m_win_height;
+    } else {
+        swapchainExtent = support.capabilities.currentExtent;
+        m_win_width     = support.capabilities.currentExtent.width;
+        m_win_height    = support.capabilities.currentExtent.height;
+    }
 
     uint32_t imagecount = support.capabilities.minImageCount + 1;
     if (support.capabilities.maxImageCount > 0 && imagecount > support.capabilities.maxImageCount) {
         imagecount = support.capabilities.maxImageCount;
     }
 
+    // Find the transformation of the surface
+    vk::SurfaceTransformFlagsKHR preTransform;
+    if (support.capabilities.supportedTransforms & vk::SurfaceTransformFlagBitsKHR::eIdentity) {
+        // We prefer a non-rotated transform
+        preTransform = vk::SurfaceTransformFlagBitsKHR::eIdentity;
+    } else {
+        preTransform = support.capabilities.currentTransform;
+    }
+
+    // Now we tie it all together in a CreateInfo
     auto createinfo = vk::SwapchainCreateInfoKHR()
                         .setSurface(m_surface)
                         .setMinImageCount(imagecount)
@@ -945,7 +1041,9 @@ renderer::createSwapChain()
                         .setImageColorSpace(surfaceformat.colorSpace)
                         .setImageExtent(extent)
                         .setImageArrayLayers(1)
-                        .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment);
+                        .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment)
+                        .setClipped(true)
+                        .setCompositeAlpha(compositeAlpha);
 
     QueueFamilyIndices indices = findQueueFamilies(m_physical_device, m_surface);
 
@@ -1344,7 +1442,14 @@ renderer::createGraphicsPipeline()
     // VkPipelineDynamicStateCreateInfo
     // This will cause the configuration of these values to be ignored and you will be required to
     // specify the data at drawing time.
-    // auto dynamicStateInfo = vk::PipelineDynamicStateCreateInfo();
+    std::array<vk::DynamicState, 2> dynamicStateEnables = { vk::DynamicState::eViewport,
+                                                            vk::DynamicState::eScissor };
+
+    auto dynamicStateInfo =
+      vk::PipelineDynamicStateCreateInfo()
+        .setPDynamicStates(dynamicStateEnables.data())
+        .setDynamicStateCount(static_cast<uint32_t>(dynamicStateEnables.size()))
+        .setFlags(vk::PipelineDynamicStateCreateFlagBits(0));
 
     // You can use uniform values in shaders, which are globals similar to dynamic state variables
     // that can be changed at drawing time to alter the behavior of your shaders without having to
@@ -1359,7 +1464,7 @@ renderer::createGraphicsPipeline()
 
     auto pipelinecreateinfo =
       vk::GraphicsPipelineCreateInfo()
-        .setStageCount(shaderstages.size())
+        .setStageCount(static_cast<uint32_t>(shaderstages.size()))
         .setPStages(shaderstages.data())
         .setPVertexInputState(&vertexinputinfo)
         .setPInputAssemblyState(&inputassembly)
@@ -1376,6 +1481,7 @@ renderer::createGraphicsPipeline()
         .setRenderPass(m_render_pass)
         // The index of the sub pass where this graphics pipeline will be used.
         .setSubpass(0);
+    //.setPDynamicState(&dynamicStateInfo);
 
     // We pass a nullptr into the argument that requests for a vk::PipelineCache, since we don't
     // need one
@@ -2096,7 +2202,7 @@ renderer::createDescriptorPool()
     auto poolinfo = vk::DescriptorPoolCreateInfo()
                       .setPoolSizeCount(static_cast<uint32_t>(descriptorPoolSizes.size()))
                       .setPPoolSizes(descriptorPoolSizes.data())
-                      .setMaxSets(descriptorPoolSizes.size());
+                      .setMaxSets(static_cast<uint32_t>(descriptorPoolSizes.size()));
 
     if (!(m_descriptor_pool = m_device.createDescriptorPool(poolinfo))) {
         throw std::runtime_error("failed to create descriptor pool!");
@@ -2486,7 +2592,7 @@ renderer::loadObj(std::string objpath) const
 
             vertices.push_back(vertex);
             size_t sze = indices.size();
-            indices.push_back(indices.size());
+            indices.push_back(static_cast<uint32_t>(indices.size()));
         }
     }
     return objMesh;
@@ -3077,7 +3183,9 @@ renderer::recreateSwapChain()
 {
     m_device.waitIdle();
 
-    cleanupSwapChain();
+    glfwGetFramebufferSize(m_window, &m_win_width, &m_win_height);
+
+    // cleanupSwapChain();
 
     createSwapChain();
     createImageViews();
@@ -3135,6 +3243,26 @@ renderer::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
                    std::min(capabilities.maxImageExtent.height, actualExtent.height));
         return actualExtent;
     }
+}
+
+vk::CompositeAlphaFlagBitsKHR
+renderer::chooseSwapAlpha(const vk::SurfaceCapabilitiesKHR& capabilities)
+{
+    vk::CompositeAlphaFlagBitsKHR compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+
+    // Ordered list of composite alpha formats. We want the first one available.
+    std::vector<vk::CompositeAlphaFlagBitsKHR> compositeAlphaFlags = {
+        vk::CompositeAlphaFlagBitsKHR::eOpaque, vk::CompositeAlphaFlagBitsKHR::ePreMultiplied,
+        vk::CompositeAlphaFlagBitsKHR::ePostMultiplied, vk::CompositeAlphaFlagBitsKHR::eInherit
+    };
+    for (auto& compositeAlphaFlag : compositeAlphaFlags) {
+        if (capabilities.supportedCompositeAlpha & compositeAlphaFlag) {
+            compositeAlpha = compositeAlphaFlag;
+            break;
+        }
+    }
+
+    return compositeAlpha;
 }
 
 void
