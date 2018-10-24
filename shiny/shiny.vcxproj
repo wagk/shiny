@@ -130,11 +130,10 @@
       <Message>Copy the dlls over</Message>
     </PostBuildEvent>
     <PreBuildEvent>
-      <Command>glslangValidator.exe -V $(ProjectDir)shaders\shader.vert -o $(ProjectDir)shaders\vert.spv
-glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders\frag.spv
-glslangValidator.exe -V $(ProjectDir)shaders\phong.vert -o $(ProjectDir)shaders\phongvert.spv
-glslangValidator.exe -V $(ProjectDir)shaders\phong.frag -o $(ProjectDir)shaders\phongfrag.spv
-
+      <Command>glslangvalidator -V $(ProjectDir)shaders\deferred\deferred.vert -o $(ProjectDir)shaders\deferred\deferred.vert.spv
+glslangvalidator -V $(ProjectDir)shaders\deferred\deferred.frag -o $(ProjectDir)shaders\deferred\deferred.frag.spv
+glslangvalidator -V $(ProjectDir)shaders\deferred\mrt.vert -o $(ProjectDir)shaders\deferred\mrt.vert.spv
+glslangvalidator -V $(ProjectDir)shaders\deferred\mrt.frag -o $(ProjectDir)shaders\deferred\mrt.frag.spv
 </Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>

@@ -92,7 +92,6 @@ shadow map generation.
 
 #define UNREFERENCED_PARAMETER(P) (P)
 
-
 namespace {
 
 const uint32_t WIDTH  = 1280;
@@ -123,8 +122,8 @@ const std::array<float, 4> backgroundColor = { 0.033f, 0.111f, 0.124f, 1.0f };
 //
 // const shiny::graphics::Mesh triangle_mesh(triangle_vertices, triangle_indices);
 
-const std::vector<std::string> all_model_filenames = { "models/imrodnew.fbx",
-                                                       "models/singleCubeSelection.fbx" };
+const std::vector<std::string> all_model_filenames = { "models/imrodnew.fbx" };
+//"models/singleCubeSelection.fbx" };
 
 const std::vector<std::string> all_texture_filenames = { "textures/Imrod_Diffuse.png",
                                                          "textures/texture.jpg" };
@@ -492,7 +491,7 @@ load the binary data from the files.
 shiny::graphics::spirvbytecode
 readFile(const std::string& filename)
 {
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+    std::ifstream file(filename, std::ios::binary | std::ios::in | std::ios::ate);
 
     if (!file.is_open()) {
         throw std::runtime_error("Failed to open file for reading!");
@@ -501,8 +500,9 @@ readFile(const std::string& filename)
     size_t            filesize = (size_t)file.tellg();
     std::vector<char> buffer(filesize);
 
-    file.seekg(0);
+    file.seekg(0, std::ios::beg);
     file.read(buffer.data(), filesize);
+    file.close();
 
     return shiny::graphics::spirvbytecode(buffer);
 }
@@ -555,19 +555,21 @@ A vertex binding describes at which rate to load data from memory throughout the
 specifies the number of bytes between data entries and whether to move to the next data entry after
 each vertex or after each instance.
 */
-vk::VertexInputBindingDescription
-Vertex::getBindingDescription()
+std::vector<vk::VertexInputBindingDescription>
+renderer::getBindingDescription()
 {
-    return vk::VertexInputBindingDescription()
-      //  The binding parameter specifies the index of the binding in the array of bindings.
-      .setBinding(0)
-      // The stride parameter specifies the number of bytes from one entry to the next
-      .setStride(sizeof(Vertex))
-      // the inputRate parameter can have one of the following values:
-      // - VK_VERTEX_INPUT_RATE_VERTEX: Move to the next data entry after each vertex
-      // - VK_VERTEX_INPUT_RATE_INSTANCE: Move to the next data entry after each instance
-      // We're not going to use instanced rendering, so we'll stick to per-vertex data.
-      .setInputRate(vk::VertexInputRate::eVertex);
+    return {
+        vk::VertexInputBindingDescription()
+          //  The binding parameter specifies the index of the binding in the array of bindings.
+          .setBinding(0)
+          // The stride parameter specifies the number of bytes from one entry to the next
+          .setStride(sizeof(Vertex))
+          // the inputRate parameter can have one of the following values:
+          // - VK_VERTEX_INPUT_RATE_VERTEX: Move to the next data entry after each vertex
+          // - VK_VERTEX_INPUT_RATE_INSTANCE: Move to the next data entry after each instance
+          // We're not going to use instanced rendering, so we'll stick to per-vertex data.
+          .setInputRate(vk::VertexInputRate::eVertex)
+    };
 }
 
 /*
@@ -576,8 +578,8 @@ description struct describes how to extract a vertex attribute from a chunk of v
 originating from a binding description. We have two attributes, position and color, so we need two
 attribute description structs.
 */
-std::array<vk::VertexInputAttributeDescription, 4>
-Vertex::getAttributeDescription()
+std::vector<vk::VertexInputAttributeDescription>
+renderer::getAttributeDescription()
 {
     return {
         /*Position Description*/
@@ -609,24 +611,30 @@ Vertex::getAttributeDescription()
           // The offset parameter specifies the number of bytes since the start of the per-vertex
           // data to read from.
           .setOffset(offsetof(Vertex, pos)),
-        /*Color Description*/
-        vk::VertexInputAttributeDescription()
-          .setBinding(0)
-          .setLocation(1)
-          .setFormat(vk::Format::eR32G32B32A32Sfloat)
-          .setOffset(offsetof(Vertex, color)),
         /*TexCoord Description*/
         vk::VertexInputAttributeDescription()
           .setBinding(0)
-          .setLocation(2)
+          .setLocation(1)
           .setFormat(vk::Format::eR32G32Sfloat)
           .setOffset(offsetof(Vertex, texcoord)),
+        /*Color Description*/
+        vk::VertexInputAttributeDescription()
+          .setBinding(0)
+          .setLocation(2)
+          .setFormat(vk::Format::eR32G32B32Sfloat)
+          .setOffset(offsetof(Vertex, color)),
         /*Normal Description*/
         vk::VertexInputAttributeDescription()
           .setBinding(0)
           .setLocation(3)
           .setFormat(vk::Format::eR32G32B32Sfloat)
-          .setOffset(offsetof(Vertex, normal))
+          .setOffset(offsetof(Vertex, normal)),
+        /*Tangent Description*/
+        vk::VertexInputAttributeDescription()
+          .setBinding(0)
+          .setLocation(4)
+          .setFormat(vk::Format::eR32G32B32Sfloat)
+          .setOffset(offsetof(Vertex, tangent))
     };
 }
 
@@ -676,9 +684,9 @@ renderer::drawFrame()
     m_device.resetFences(m_in_flight_fences[m_current_frame]);
 
     // Acquire image from swapchain.
-    auto next_image_results =
-      m_device.acquireNextImageKHR(m_swapchain, std::numeric_limits<uint64_t>::max(),
-                                   m_image_available_semaphores[m_current_frame], nullptr);
+    auto next_image_results = m_device.acquireNextImageKHR(
+      m_swapchain_struct.swapchain, std::numeric_limits<uint64_t>::max(),
+      m_image_available_semaphores[m_current_frame], nullptr);
     auto result = next_image_results.result;
 
     if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR) {
@@ -723,7 +731,7 @@ renderer::drawFrame()
     m_graphics_queue.submit(submitinfo, m_in_flight_fences[m_current_frame]);
 
     // TODO: make this a smartptr or something
-    std::vector<vk::SwapchainKHR> swapchains = { m_swapchain };
+    std::vector<vk::SwapchainKHR> swapchains = { m_swapchain_struct.swapchain };
 
     auto presentinfo = vk::PresentInfoKHR()
                          // The first two parameters specify which semaphores to wait on before
@@ -752,7 +760,7 @@ renderer::initWindow()
     // Address Hard Hints for glfw settings.
     // NOTE: Hard hints are compulsory
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     // glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     // Get parameters for size
     GLFWmonitor* primary_monitor = glfwGetPrimaryMonitor();
@@ -790,7 +798,7 @@ renderer::createInstance()
     }
 
     auto appinfo = vk::ApplicationInfo()
-                     .setPApplicationName("Hello Triangle")
+                     .setPApplicationName("Shiny Engine: A Vulkan renderer")
                      .setApplicationVersion(VK_MAKE_VERSION(1, 0, 0))
                      .setPEngineName("No Engine")
                      .setEngineVersion(VK_MAKE_VERSION(1, 0, 0))
@@ -819,6 +827,7 @@ renderer::createInstance()
 
     // for debugging
     {
+        std::cout << "Extension Properties:\n";
         std::vector<vk::ExtensionProperties> extensionProperties =
           vk::enumerateInstanceExtensionProperties();
 
@@ -871,20 +880,20 @@ renderer::generateQuads()
     for (uint32_t i = 0; i < 3; i++) {
         // Last component of normal is used for debug display sampler index
         vertexBuffer.push_back({ { x + 1.0f, y + 1.0f, 0.0f },
-                                 { 1.0f, 1.0f, 1.0f, 1.0f },
                                  { 1.0f, 1.0f },
+                                 { 1.0f, 1.0f, 1.0f },
                                  { 0.0f, 0.0f, (float)i } });
         vertexBuffer.push_back({ { x, y + 1.0f, 0.0f },
-                                 { 1.0f, 1.0f, 1.0f, 1.0f },
                                  { 0.0f, 1.0f },
+                                 { 1.0f, 1.0f, 1.0f },
                                  { 0.0f, 0.0f, (float)i } });
         vertexBuffer.push_back({ { x + 0.0f, y, 0.0f },
-                                 { 1.0f, 1.0f, 1.0f, 1.0f },
                                  { 0.0f, 0.0f },
+                                 { 1.0f, 1.0f, 1.0f },
                                  { 0.0f, 0.0f, (float)i } });
         vertexBuffer.push_back({ { x + 1.0f, y, 0.0f },
-                                 { 1.0f, 1.0f, 1.0f, 1.0f },
                                  { 1.0f, 0.0f },
+                                 { 1.0f, 1.0f, 1.0f },
                                  { 0.0f, 0.0f, (float)i } });
         x += 1.0f;
         if (x > 1.0f) {
@@ -907,6 +916,8 @@ renderer::generateQuads()
     m_offscreen_quads.num_indices = static_cast<uint32_t>(indexBuffer.size());
 
     createIndexBuffer(m_offscreen_quads, indexBuffer);
+
+    createUniformBuffer(m_offscreen_quads, sizeof(uniformbufferobject));
 
     m_offscreen_quads.device = &m_device;
 }
@@ -1000,7 +1011,7 @@ https://www.khronos.org/registry/vulkan/specs/1.0-wsi_extensions/html/vkspec.htm
 void
 renderer::createSwapChain()
 {
-    auto oldSwapchain = m_swapchain;
+    auto oldSwapchain = m_swapchain_struct.swapchain;
 
     SwapChainSupportDetails support = querySwapChainSupport(m_physical_device, m_surface);
 
@@ -1025,7 +1036,7 @@ renderer::createSwapChain()
     }
 
     // Find the transformation of the surface
-    vk::SurfaceTransformFlagsKHR preTransform;
+    vk::SurfaceTransformFlagBitsKHR preTransform;
     if (support.capabilities.supportedTransforms & vk::SurfaceTransformFlagBitsKHR::eIdentity) {
         // We prefer a non-rotated transform
         preTransform = vk::SurfaceTransformFlagBitsKHR::eIdentity;
@@ -1035,50 +1046,109 @@ renderer::createSwapChain()
 
     // Now we tie it all together in a CreateInfo
     auto createinfo = vk::SwapchainCreateInfoKHR()
+                        .setPNext(NULL)
                         .setSurface(m_surface)
                         .setMinImageCount(imagecount)
                         .setImageFormat(surfaceformat.format)
                         .setImageColorSpace(surfaceformat.colorSpace)
                         .setImageExtent(extent)
-                        .setImageArrayLayers(1)
                         .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment)
+                        .setPreTransform(preTransform)
+                        .setImageArrayLayers(1)
+                        .setImageSharingMode(vk::SharingMode::eExclusive)  // For now
+                        .setQueueFamilyIndexCount(0)
+                        .setPQueueFamilyIndices(NULL)
+                        .setPresentMode(presentmode)
+                        .setOldSwapchain(oldSwapchain)
                         .setClipped(true)
                         .setCompositeAlpha(compositeAlpha);
 
-    QueueFamilyIndices indices = findQueueFamilies(m_physical_device, m_surface);
+    /* NOTE: removing this for now until I understand image sharing modes better
+QueueFamilyIndices indices = findQueueFamilies(m_physical_device, m_surface);
 
-    if (indices.graphicsFamily() != indices.presentFamily()) {
-        std::array<uint32_t, 2> queuefamilyindices = { (uint32_t)indices.graphicsFamily(),
-                                                       (uint32_t)indices.presentFamily() };
-        createinfo.setImageSharingMode(vk::SharingMode::eConcurrent)
-          .setQueueFamilyIndexCount(2)
-          .setPQueueFamilyIndices(queuefamilyindices.data());
-    } else {
-        createinfo.setImageSharingMode(vk::SharingMode::eExclusive);
+if (indices.graphicsFamily() != indices.presentFamily()) {
+    std::array<uint32_t, 2> queuefamilyindices = { (uint32_t)indices.graphicsFamily(),
+                                                   (uint32_t)indices.presentFamily() };
+    createinfo.setImageSharingMode(vk::SharingMode::eConcurrent)
+      .setQueueFamilyIndexCount(2)
+      .setPQueueFamilyIndices(queuefamilyindices.data());
+} else {
+    createinfo.setImageSharingMode(vk::SharingMode::eExclusive);
+}*/
+
+    // Enable transfer source on swap chain images if supported
+    if (support.capabilities.supportedUsageFlags & vk::ImageUsageFlagBits::eTransferSrc) {
+        createinfo.imageUsage |= vk::ImageUsageFlagBits::eTransferSrc;
     }
 
-    createinfo.setPreTransform(support.capabilities.currentTransform)
-      .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque)
-      .setPresentMode(presentmode)
-      .setClipped(true)
-      .setOldSwapchain(m_swapchain);
+    // Enable transfer destination on swap chain images if supported
+    if (support.capabilities.supportedUsageFlags & vk::ImageUsageFlagBits::eTransferDst) {
+        createinfo.imageUsage |= vk::ImageUsageFlagBits::eTransferDst;
+    }
+    // Create Swap Chain
+    m_swapchain_struct.swapchain = m_device.createSwapchainKHR(createinfo);
 
-    // m_swapchain.reset(m_device->createSwapchainKHR(createinfo));
-
-    m_swapchain = m_device.createSwapchainKHR(createinfo);
-
-    {
-        // auto images = m_device->getSwapchainImagesKHR(m_swapchain.get());
-        auto images = m_device.getSwapchainImagesKHR(m_swapchain);
-        m_swapchain_images.reserve(images.size());
-
-        for (const auto& image : images) {
-            m_swapchain_images.emplace_back(image);
+    // If an existing swap chain is re-created, destroy the old swap chain
+    // This also cleans up all the presentable images
+    if (oldSwapchain) {
+        for (uint32_t i = 0; i < imagecount; ++i) {
+            m_device.destroyImageView(m_swapchain_struct.imageViews[i]);
         }
+        m_device.destroySwapchainKHR(oldSwapchain);
     }
 
-    m_swapchain_image_format = surfaceformat.format;
-    m_swapchain_extent       = extent;
+    // Get the swap chain images
+    auto images = m_device.getSwapchainImagesKHR(m_swapchain_struct.swapchain);
+    m_swapchain_struct.images.reserve(images.size());
+    for (const auto& image : images) {
+        m_swapchain_struct.images.emplace_back(image);
+    }
+
+    // Get the swap chain buffers containing the image and imageview
+    m_swapchain_struct.frameBuffers.reserve(images.size());
+    for (uint32_t i = 0; i < images.size(); ++i) {
+        auto ssr = vk::ImageSubresourceRange()
+                     .setAspectMask(vk::ImageAspectFlagBits::eColor)
+                     .setBaseMipLevel(0)
+                     .setLevelCount(1)
+                     .setBaseArrayLayer(0)
+                     .setLayerCount(1);
+
+        auto colorAttachmentView =
+          vk::ImageViewCreateInfo()
+            .setPNext(NULL)
+            .setFormat(surfaceformat.format)
+            .setComponents({ vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG,
+                             vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA })
+            .setSubresourceRange(ssr)
+            .setViewType(vk::ImageViewType::e2D)
+            .setFlags(vk::ImageViewCreateFlagBits(0))
+            .setImage(m_swapchain_struct.images[i]);
+        m_swapchain_struct.imageViews.emplace_back(m_device.createImageView(colorAttachmentView));
+    }
+
+    m_swapchain_struct.format = surfaceformat.format;
+    m_swapchain_struct.height = extent.height;
+    m_swapchain_struct.width  = extent.width;
+}
+
+void
+renderer::resizeSwapChain()
+{
+    vk::SurfaceCapabilitiesKHR capabilities =
+      m_physical_device.getSurfaceCapabilitiesKHR(m_surface);
+
+    uint32_t newWidth  = capabilities.currentExtent.width;
+    uint32_t newHeight = capabilities.currentExtent.height;
+
+    // Check base case: swapchain is still the same size.
+    if (m_swapchain_struct.height == newHeight && m_swapchain_struct.width == newWidth) {
+        return;
+    }
+
+    Swapchain old = m_swapchain_struct;
+
+    // create Swapchain
 }
 
 /*
@@ -1096,11 +1166,11 @@ https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#re
 void
 renderer::createImageViews()
 {
-    m_swapchain_image_views.reserve(m_swapchain_images.size());
+    m_swapchain_struct.imageViews.reserve(m_swapchain_struct.images.size());
 
-    for (const vk::Image& image : m_swapchain_images) {
-        m_swapchain_image_views.emplace_back(
-          createImageView(image, m_swapchain_image_format, vk::ImageAspectFlagBits::eColor));
+    for (const vk::Image& image : m_swapchain_struct.images) {
+        m_swapchain_struct.imageViews.emplace_back(
+          createImageView(image, m_swapchain_struct.format, vk::ImageAspectFlagBits::eColor));
     }
 }
 
@@ -1116,7 +1186,7 @@ renderer::createRenderPass()
     auto colorattachment =
       vk::AttachmentDescription()
         // The format of the color attachment should match the format of the swap chain images.
-        .setFormat(m_swapchain_image_format)
+        .setFormat(m_swapchain_struct.format)
         // we're not doing anything with multisampling
         .setSamples(vk::SampleCountFlagBits::e1)
         // The loadOp determines what to do with the data in the attachment before rendering
@@ -1124,6 +1194,8 @@ renderer::createRenderPass()
         // The storeOp determines what to do with the data in the attachment after
         // rendering.
         .setStoreOp(vk::AttachmentStoreOp::eStore)
+        .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
+        .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
         // We don't care what the initial memory layout of the VkImage is
         .setInitialLayout(vk::ImageLayout::eUndefined)
         // We wnat the final layout of the VkImage to be something that can be presented in the swap
@@ -1157,8 +1229,8 @@ renderer::createRenderPass()
                              .setFormat(findDepthFormat())
                              .setSamples(vk::SampleCountFlagBits::e1)
                              .setLoadOp(vk::AttachmentLoadOp::eClear)
-                             .setStoreOp(vk::AttachmentStoreOp::eDontCare)
-                             .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
+                             .setStoreOp(vk::AttachmentStoreOp::eStore)
+                             .setStencilLoadOp(vk::AttachmentLoadOp::eClear)
                              .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
                              .setInitialLayout(vk::ImageLayout::eUndefined)
                              .setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
@@ -1198,42 +1270,62 @@ renderer::createRenderPass()
     // go with the second option here, because it's a good excuse to have a look at subpass
     // dependencies and how they work.
 
-    auto subpassdependency =
-      vk::SubpassDependency()
-        // The special value VK_SUBPASS_EXTERNAL refers to the implicit subpass before or after the
-        // render pass depending on whether it is specified in srcSubpass or dstSubpass
-        // https://stackoverflow.com/questions/45724495/no-definition-for-vk-subpass-external-in-vulkan-hpp
-        .setSrcSubpass(VK_SUBPASS_EXTERNAL)
-        // The index 0 refers to our subpass, which is the first and only one. The dstSubpass must
-        // always be higher than srcSubpass to prevent cycles in the dependency graph. (Not sure
-        // about this because it looks like VK_SUBPASS_EXTERNAL is uint and greater
-        .setDstSubpass(0)
-        // The next two fields specify the operations to wait on and the stages in which these
-        // operations occur. We need to wait for the swap chain to finish reading from the image
-        // before we can access it. This can be accomplished by waiting on the color attachment
-        // output stage itself.
-        .setSrcStageMask(vk::PipelineStageFlags(vk::PipelineStageFlagBits::eColorAttachmentOutput))
-        .setSrcAccessMask(vk::AccessFlags())
-        // The operations that should wait on this are in the color attachment stage and involve the
-        // reading and writing of the color attachment. These settings will prevent the transition
-        // from happening until it's actually necessary (and allowed): when we want to start writing
-        // colors to it.
-        .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput)
-        .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentRead
-                          | vk::AccessFlagBits::eColorAttachmentWrite);
+    std::array<vk::SubpassDependency, 2> subpassdependencies;
+
+    subpassdependencies[0]
+      // The special value VK_SUBPASS_EXTERNAL refers to the implicit subpass before or after the
+      // render pass depending on whether it is specified in srcSubpass or dstSubpass
+      // https://stackoverflow.com/questions/45724495/no-definition-for-vk-subpass-external-in-vulkan-hpp
+      .setSrcSubpass(VK_SUBPASS_EXTERNAL)
+      // The index 0 refers to our subpass, which is the first and only one. The dstSubpass must
+      // always be higher than srcSubpass to prevent cycles in the dependency graph. (Not sure
+      // about this because it looks like VK_SUBPASS_EXTERNAL is uint and greater
+      .setDstSubpass(0)
+      // The next two fields specify the operations to wait on and the stages in which these
+      // operations occur. We need to wait for the swap chain to finish reading from the image
+      // before we can access it. This can be accomplished by waiting on the color attachment
+      // output stage itself.
+      .setSrcStageMask(vk::PipelineStageFlagBits::eBottomOfPipe)
+      .setSrcAccessMask(vk::AccessFlagBits::eMemoryRead)
+      // The operations that should wait on this are in the color attachment stage and involve the
+      // reading and writing of the color attachment. These settings will prevent the transition
+      // from happening until it's actually necessary (and allowed): when we want to start writing
+      // colors to it.
+      .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput)
+      .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentRead
+                        | vk::AccessFlagBits::eColorAttachmentWrite);
+
+    subpassdependencies[1]
+      .setSrcSubpass(0)
+      .setDstSubpass(VK_SUBPASS_EXTERNAL)
+      .setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput)
+      .setSrcAccessMask(vk::AccessFlagBits::eColorAttachmentRead
+                        | vk::AccessFlagBits::eColorAttachmentWrite)
+      .setDstStageMask(vk::PipelineStageFlagBits::eBottomOfPipe)
+      .setDstAccessMask(vk::AccessFlagBits::eMemoryRead);
 
     std::array<vk::AttachmentDescription, 2> attachments = { colorattachment, depthattachment };
 
-    auto renderpasscreateinfo = vk::RenderPassCreateInfo()
-                                  .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-                                  .setPAttachments(attachments.data())
-                                  .setSubpassCount(1)
-                                  .setPSubpasses(&subpass)
-                                  .setDependencyCount(1)
-                                  .setPDependencies(&subpassdependency);
+    auto renderpasscreateinfo =
+      vk::RenderPassCreateInfo()
+        .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+        .setPAttachments(attachments.data())
+        .setSubpassCount(1)
+        .setPSubpasses(&subpass)
+        .setDependencyCount(static_cast<uint32_t>(subpassdependencies.size()))
+        .setPDependencies(subpassdependencies.data());
 
     if (!(m_render_pass = m_device.createRenderPass(renderpasscreateinfo))) {
         throw std::runtime_error("failed to create render pass!");
+    }
+}
+
+void
+renderer::createPipelineCache()
+{
+    auto pipelineCacheCreateInfo = vk::PipelineCacheCreateInfo();
+    if (!(m_pipeline_cache = m_device.createPipelineCache(pipelineCacheCreateInfo))) {
+        std::runtime_error("Could not create Pipeline Cache!");
     }
 }
 
@@ -1303,7 +1395,7 @@ renderer::createGraphicsPipeline()
         .setCullMode(vk::CullModeFlagBits::eBack)
         // The frontFace variable specifies the vertex order for faces to be considered front-facing
         // and can be clockwise or counterclockwise.
-        .setFrontFace(vk::FrontFace::eCounterClockwise)
+        .setFrontFace(vk::FrontFace::eClockwise)
         // The rasterizer can alter the depth values by adding a constant value or biasing them
         // based on a fragment's slope. This is sometimes used for shadow mapping, but we won't be
         // using it.
@@ -1327,7 +1419,7 @@ renderer::createGraphicsPipeline()
     // disable both modes, as we've done here, in which case the fragment colors will be written to
     // the framebuffer unmodified.
     auto colorblending = vk::PipelineColorBlendStateCreateInfo()
-                           .setLogicOpEnable(false)
+                           //.setLogicOpEnable(false)
                            .setAttachmentCount(1)
                            .setPAttachments(&colorblendattachment);
 
@@ -1340,42 +1432,27 @@ renderer::createGraphicsPipeline()
      * buffer. This is useful for drawing transparent objects. They should be compared to the
      * previously rendered opaque objects, but not cause further away transparent objects to not be
      * drawn.*/
-    auto depthstencil = vk::PipelineDepthStencilStateCreateInfo()
-                          .setDepthTestEnable(true)
-                          .setDepthWriteEnable(true)
-                          .setDepthCompareOp(vk::CompareOp::eLess)
-                          .setDepthBoundsTestEnable(false)
-                          .setMinDepthBounds(0.0f)  // optional for now
-                          .setMaxDepthBounds(1.0f)  // optional for now
-                          .setStencilTestEnable(false)
-                          .setFront(vk::StencilOpState())  // optional for now
-                          .setBack(vk::StencilOpState());  // optional for now
-
-    // A viewport basically describes the region of the framebuffer that the output will be rendered
-    // to. This will almost always be (0, 0) to (width, height)
-    auto viewport = vk::Viewport()
-                      .setX(0.f)
-                      .setY(0.f)
-                      .setWidth((float)m_swapchain_extent.width)
-                      .setHeight((float)m_swapchain_extent.height)
-                      .setMinDepth(0.f)
-                      .setMaxDepth(1.f);
-
-    // While viewports define the transformation from the image to the framebuffer, scissor
-    // rectangles define in which regions pixels will actually be stored. Any pixels outside the
-    // scissor rectangles will be discarded by the rasterizer. They function like a filter rather
-    // than a transformation.
-    auto scissor = vk::Rect2D{ vk::Offset2D{ 0, 0 }, m_swapchain_extent };
+    vk::PipelineDepthStencilStateCreateInfo depthstencil =
+      vk::PipelineDepthStencilStateCreateInfo()
+        .setDepthTestEnable(true)
+        .setDepthWriteEnable(true)
+        .setDepthCompareOp(vk::CompareOp::eLessOrEqual);
+    //.setDepthBoundsTestEnable(false)
+    //.setMinDepthBounds(0.0f)  // optional for now
+    //.setMaxDepthBounds(1.0f)  // optional for now
+    //.setStencilTestEnable(false)
+    depthstencil.setFront(depthstencil.back);
+    depthstencil.back.compareOp = vk::CompareOp::eAlways;
 
     // Now this viewport and scissor rectangle need to be combined into a viewport state using the
     // VkPipelineViewportStateCreateInfo struct. It is possible to use multiple viewports and
     // scissor rectangles on some graphics cards, so its members reference an array of them. Using
     // multiple requires enabling a GPU feature (see logical device creation).
-    auto viewportstate = vk::PipelineViewportStateCreateInfo()
-                           .setViewportCount(1)
-                           .setPViewports(&viewport)
-                           .setScissorCount(1)
-                           .setPScissors(&scissor);
+    auto viewportstate =
+      vk::PipelineViewportStateCreateInfo().setViewportCount(1).setScissorCount(1).setFlags(
+        vk::PipelineViewportStateCreateFlagBits(0));
+    //.setPViewports(&viewport)
+    //.setPScissors(&scissor);
 
     // The VkPipelineMultisampleStateCreateInfo struct configures multisampling, which is one of the
     // ways to perform anti-aliasing. It works by combining the fragment shader results of multiple
@@ -1385,56 +1462,9 @@ renderer::createGraphicsPipeline()
     // expensive than simply rendering to a higher resolution and then downscaling. Enabling it
     // requires enabling a GPU feature (We don't).
     auto multisampling = vk::PipelineMultisampleStateCreateInfo()
-                           .setSampleShadingEnable(false)
-                           .setRasterizationSamples(vk::SampleCountFlagBits::e1);
-
-    // Shader stuff
-    auto vertshadercode = readFile("shaders/phongvert.spv");
-    auto fragshadercode = readFile("shaders/phongfrag.spv");
-
-    m_vertex_shader_module   = createShaderModule(vertshadercode, m_device);
-    m_fragment_shader_module = createShaderModule(fragshadercode, m_device);
-
-    auto vertex_stagecreateinfo =
-      vk::PipelineShaderStageCreateInfo()
-        .setStage(vk::ShaderStageFlagBits::eVertex)
-        .setModule(m_vertex_shader_module)
-        .setPName("main");  // this is the main entry point of the shader
-
-    auto fragment_stagecreateinfo =
-      vk::PipelineShaderStageCreateInfo()
-        .setStage(vk::ShaderStageFlagBits::eFragment)
-        .setModule(m_fragment_shader_module)
-        .setPName("main");  // this is the main entry point of the shader
-
-    auto shaderstages =
-      std::array<vk::PipelineShaderStageCreateInfo, 2>{ vertex_stagecreateinfo,
-                                                        fragment_stagecreateinfo };
-
-    // vertex input
-    // The VkPipelineVertexInputStateCreateInfo structure describes the format of the vertex data
-    // that will be passed to the vertex shader. It describes this in roughly two ways:
-    //  - Bindings: spacing between data and whether the data is per-vertex or per-instance (see
-    //    instancing)
-    //  - Attribute descriptions: type of the attributes passed to the vertex shader,
-    //    which binding to load them from and at which offset
-    auto bindingdescription    = Vertex::getBindingDescription();
-    auto attributedescriptions = Vertex::getAttributeDescription();
-
-    auto vertexinputinfo =
-      vk::PipelineVertexInputStateCreateInfo()
-        .setVertexBindingDescriptionCount(1)
-        .setPVertexBindingDescriptions(&bindingdescription)
-        .setVertexAttributeDescriptionCount((uint32_t)attributedescriptions.size())
-        .setPVertexAttributeDescriptions(attributedescriptions.data());
-
-
-    // After a fragment shader has returned a color, it needs to be combined with the color that is
-    // already in the framebuffer. This transformation is known as color blending and there are two
-    // ways to do it:
-    //  - Mix the old and new value to produce a final color
-    //  - Combine the old and new value using a bitwise operation
-
+                           //.setSampleShadingEnable(false)
+                           .setRasterizationSamples(vk::SampleCountFlagBits::e1)
+                           .setFlags(vk::PipelineMultisampleStateCreateFlags(0));
 
     // A limited amount of the state that we've specified in the previous structs can actually be
     // changed without recreating the pipeline. Examples are the size of the viewport, line width
@@ -1451,41 +1481,101 @@ renderer::createGraphicsPipeline()
         .setDynamicStateCount(static_cast<uint32_t>(dynamicStateEnables.size()))
         .setFlags(vk::PipelineDynamicStateCreateFlagBits(0));
 
-    // You can use uniform values in shaders, which are globals similar to dynamic state variables
-    // that can be changed at drawing time to alter the behavior of your shaders without having to
-    // recreate them. They are commonly used to pass the transformation matrix to the vertex shader,
-    // or to create texture samplers in the fragment shader.
-    // These uniform values need to be specified during pipeline creation by creating a
-    // VkPipelineLayout object.
-    auto pipelinelayout =
-      vk::PipelineLayoutCreateInfo().setSetLayoutCount(1).setPSetLayouts(&m_descriptor_set_layout);
 
-    m_pipeline_layout = m_device.createPipelineLayout(pipelinelayout);
+    // This is where we setup the Vertex Descriptions
+    // vertex input
+    // The VkPipelineVertexInputStateCreateInfo structure describes the format of the vertex data
+    // that will be passed to the vertex shader. It describes this in roughly two ways:
+    //  - Bindings: spacing between data and whether the data is per-vertex or per-instance (see
+    //    instancing)
+    //  - Attribute descriptions: type of the attributes passed to the vertex shader,
+    //    which binding to load them from and at which offset
+    auto bindingdescription    = getBindingDescription();
+    auto attributedescriptions = getAttributeDescription();
 
-    auto pipelinecreateinfo =
-      vk::GraphicsPipelineCreateInfo()
-        .setStageCount(static_cast<uint32_t>(shaderstages.size()))
-        .setPStages(shaderstages.data())
-        .setPVertexInputState(&vertexinputinfo)
-        .setPInputAssemblyState(&inputassembly)
-        .setPViewportState(&viewportstate)
-        .setPRasterizationState(&rasterizer)
-        .setPMultisampleState(&multisampling)
-        .setPColorBlendState(&colorblending)
-        .setPDepthStencilState(&depthstencil)
-        .setLayout(m_pipeline_layout)
-        // And finally we have the reference to the render pass. It is also possible to use other
-        // render passes with this pipeline instead of this specific instance, but they have to be
-        // compatible with renderPass. The requirements for compatibility are described
-        // https://www.khronos.org/registry/vulkan/specs/1.0/html/vkspec.html#renderpass-compatibility
-        .setRenderPass(m_render_pass)
-        // The index of the sub pass where this graphics pipeline will be used.
-        .setSubpass(0);
-    //.setPDynamicState(&dynamicStateInfo);
+    auto vertexinputinfo =
+      vk::PipelineVertexInputStateCreateInfo()
+        .setVertexBindingDescriptionCount(static_cast<uint32_t>(bindingdescription.size()))
+        .setPVertexBindingDescriptions(bindingdescription.data())
+        .setVertexAttributeDescriptionCount(static_cast<uint32_t>(attributedescriptions.size()))
+        .setPVertexAttributeDescriptions(attributedescriptions.data());
 
-    // We pass a nullptr into the argument that requests for a vk::PipelineCache, since we don't
-    // need one
-    m_graphics_pipeline = m_device.createGraphicsPipeline(nullptr, pipelinecreateinfo);
+
+    // After a fragment shader has returned a color, it needs to be combined with the color that is
+    // already in the framebuffer. This transformation is known as color blending and there are two
+    // ways to do it:
+    //  - Mix the old and new value to produce a final color
+    //  - Combine the old and new value using a bitwise operation
+
+
+    auto shaderstages = std::array<vk::PipelineShaderStageCreateInfo, 2>();
+
+    // And finally we have the reference to the render pass. It is also possible to use other
+    // render passes with this pipeline instead of this specific instance, but they have to be
+    // compatible with renderPass. The requirements for compatibility are described
+    // https://www.khronos.org/registry/vulkan/specs/1.0/html/vkspec.html#renderpass-compatibility
+    auto pipelinecreateinfo = vk::GraphicsPipelineCreateInfo()
+                                .setLayout(m_pipeline_layouts.deferred)
+                                .setRenderPass(m_render_pass)
+                                .setFlags(vk::PipelineCreateFlags(0))
+                                .setBasePipelineIndex(-1)
+                                .setPInputAssemblyState(&inputassembly)
+                                .setPRasterizationState(&rasterizer)
+                                .setPColorBlendState(&colorblending)
+                                .setPMultisampleState(&multisampling)
+                                .setPViewportState(&viewportstate)
+                                .setPDepthStencilState(&depthstencil)
+                                .setPDynamicState(&dynamicStateInfo)
+                                .setStageCount(static_cast<uint32_t>(shaderstages.size()))
+                                .setPStages(shaderstages.data());
+    //.setPVertexInputState(&vertexinputinfo)
+    // The index of the sub pass where this graphics pipeline will be used.
+    //.setSubpass(0);
+
+    // Shader loading
+    // Final fullscreen composition pass pipeline
+    shaderstages[0] =
+      loadShader("main", "shaders/deferred/deferred.vert.spv", vk::ShaderStageFlagBits::eVertex);
+    shaderstages[1] =
+      loadShader("main", "shaders/deferred/deferred.frag.spv", vk::ShaderStageFlagBits::eFragment);
+
+    auto emptyInputState                 = vk::PipelineVertexInputStateCreateInfo();
+    pipelinecreateinfo.pVertexInputState = &emptyInputState;
+    pipelinecreateinfo.layout            = m_pipeline_layouts.deferred;
+    // pipelinecreateinfo.setPVertexInputState(&emptyInputState)
+    //.setLayout(m_pipeline_layouts.deferred);
+    if (!(m_graphics_pipelines.deferred =
+            m_device.createGraphicsPipeline(m_pipeline_cache, pipelinecreateinfo))) {
+        std::runtime_error("Error creating deferred pipeline!\n");
+    }
+
+    // Offscreen pipeline
+    shaderstages[0] =
+      loadShader("main", "shaders/deferred/mrt.vert.spv", vk::ShaderStageFlagBits::eVertex);
+    shaderstages[1] =
+      loadShader("main", "shaders/deferred/mrt.frag.spv", vk::ShaderStageFlagBits::eFragment);
+    // Separate render pass
+    pipelinecreateinfo.setRenderPass(m_offscreen_framebuffer.renderPass);
+    // Separate layout
+    pipelinecreateinfo.setLayout(m_pipeline_layouts.offscreen);
+
+    // Blend attachment states required for all color attachments
+    // This is important, as color write mask will otherwise be 0x0 and you
+    // won't see anything rendered to the attachment
+    auto blendState =
+      vk::PipelineColorBlendAttachmentState()
+        .setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG
+                           | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA)
+        .setBlendEnable(false);
+    auto blendAttachmentStates =
+      std::array<vk::PipelineColorBlendAttachmentState, 3>{ blendState, blendState, blendState };
+    colorblending.setAttachmentCount(static_cast<uint32_t>(blendAttachmentStates.size()))
+      .setPAttachments(blendAttachmentStates.data());
+
+    if (!(m_graphics_pipelines.offscreen =
+            m_device.createGraphicsPipeline(m_pipeline_cache, pipelinecreateinfo))) {
+        std::runtime_error("Error creating offscreen pipeline!\n");
+    }
 }
 
 /*
@@ -1501,20 +1591,23 @@ https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#Vk
 void
 renderer::createFramebuffers()
 {
-    m_swapchain_framebuffers.reserve(m_swapchain_image_views.size());
+    m_swapchain_struct.frameBuffers.reserve(m_swapchain_struct.imageViews.size());
 
-    for (auto const& view : m_swapchain_image_views) {
-        std::array<vk::ImageView, 2> attachments = { view, m_depth_image_view };
+    for (auto const& view : m_swapchain_struct.imageViews) {
+        std::array<vk::ImageView, 2> attachments = { view,
+                                                     m_offscreen_framebuffer.depth.image_view };
 
         auto framebufferinfo = vk::FramebufferCreateInfo()
+                                 .setPNext(NULL)
                                  .setRenderPass(m_render_pass)
                                  // The attachmentCount and pAttachments parameters specify the
                                  // VkImageView objects that should be bound to the respective
                                  // attachment descriptions in the render pass pAttachment array.
-                                 .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+                                 .setAttachmentCount(2)
+                                 //.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
                                  .setPAttachments(attachments.data())
-                                 .setWidth(m_swapchain_extent.width)
-                                 .setHeight(m_swapchain_extent.height)
+                                 .setWidth(m_win_width)
+                                 .setHeight(m_win_height)
                                  // layers refers to the number of layers in image arrays. Our swap
                                  // chain images are single images, so the number of layers is 1.
                                  .setLayers(1);
@@ -1523,7 +1616,7 @@ renderer::createFramebuffers()
         if (!framebuffer) {
             throw std::runtime_error("failed to create framebuffer!");
         }
-        m_swapchain_framebuffers.emplace_back(framebuffer);
+        m_swapchain_struct.frameBuffers.emplace_back(framebuffer);
     }
 }
 
@@ -1550,9 +1643,28 @@ renderer::createCommandPool()
         // graphics and presentation queues we retrieved. Each command pool can only allocate
         // command buffers that are submitted on a single type of queue. We're going to record
         // commands for drawing, which is why we've chosen the graphics queue family.
-        .setQueueFamilyIndex(indices.graphicsFamily());
+        .setQueueFamilyIndex(indices.graphicsFamily())
+        .setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
 
     m_command_pool = m_device.createCommandPool(commandpoolinfo);
+}
+
+vk::CommandBuffer
+renderer::createCommandBuffer(vk::CommandBufferLevel level, bool begin)
+{
+    auto cmdBufAllocInfo = vk::CommandBufferAllocateInfo()
+                             .setCommandPool(m_command_pool)
+                             .setLevel(level)
+                             .setCommandBufferCount(1);
+
+    vk::CommandBuffer cmdBuffer;
+    m_device.allocateCommandBuffers(&cmdBufAllocInfo, &cmdBuffer);
+
+    if (begin) {
+        auto cmdBufInfo = vk::CommandBufferBeginInfo();
+        cmdBuffer.begin(&cmdBufInfo);
+    }
+    return cmdBuffer;
 }
 
 /*
@@ -1591,6 +1703,8 @@ https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#Vk
 void
 renderer::createCommandBuffers()
 {
+    m_command_buffers.resize(m_swapchain_struct.imageCount);
+
     auto allocinfo =
       vk::CommandBufferAllocateInfo()
         .setCommandPool(m_command_pool)
@@ -1603,141 +1717,9 @@ renderer::createCommandBuffers()
         // We won't make use of the secondary command buffer functionality here, but you can imagine
         // that it's helpful to reuse common operations from primary command buffers.
         .setLevel(vk::CommandBufferLevel::ePrimary)
-        .setCommandBufferCount((uint32_t)m_swapchain_framebuffers.size());
+        .setCommandBufferCount(static_cast<uint32_t>(m_swapchain_struct.frameBuffers.size()));
 
     m_command_buffers = m_device.allocateCommandBuffers(allocinfo);
-
-    // We begin recording a command buffer by calling vkBeginCommandBuffer with a small
-    // VkCommandBufferBeginInfo structure as argument that specifies some details about the usage of
-    // this specific command buffer.whereupon which we can use vkCmd*-named calls to record draw
-    // commands/dispatch compute commands
-
-    for (size_t i = 0; i < m_command_buffers.size(); ++i) {
-        auto const& command_buffer = m_command_buffers[i];
-        auto        begininfo =
-          vk::CommandBufferBeginInfo()
-            // The flags parameter specifies how we're going to use the command buffer. The
-            // following values are available:
-            //  - VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: The command buffer will be rerecorded
-            //    right after executing it once.
-            //  - VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT:
-            //    This is a secondary command buffer that will be entirely within a single render
-            //    pass.
-            //  - VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT: The command buffer can be
-            //    resubmitted while it is also already pending execution.
-            // We have used the last flag because we may already be scheduling the drawing commands
-            // for the next frame while the last frame is not finished yet.
-            .setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse);
-
-        recordCommandBuffer(command_buffer, begininfo, [=]() {
-            auto const& framebuffer = m_swapchain_framebuffers[i];
-            auto        renderarea  = vk::Rect2D({ 0, 0 }, m_swapchain_extent);
-
-            /*The range of depths in the depth buffer is 0.0 to 1.0 in Vulkan, where 1.0 lies at the
-             * far view plane and 0.0 at the near view plane. The initial value at each point in the
-             * depth buffer should be the furthest possible depth, which is 1.0.*/
-            std::array<vk::ClearValue, 2> clearValues = {};
-            clearValues[0].setColor(vk::ClearColorValue(backgroundColor));
-            clearValues[1].setDepthStencil(vk::ClearDepthStencilValue(1.0f, 0));
-
-            auto renderpassinfo =
-              vk::RenderPassBeginInfo()
-                // The first parameters are the render pass itself and the attachments to bind. We
-                // created a framebuffer for each swap chain image that specifies it as color
-                // attachment.
-                .setRenderPass(m_render_pass)
-                .setFramebuffer(framebuffer)
-                // The render area defines where shader loads and stores will take place. The pixels
-                // outside this region will have undefined values. It should match the size of the
-                // attachments for best performance.
-                .setRenderArea(renderarea)
-                // The last two parameters define the clear values to use for
-                // VK_ATTACHMENT_LOAD_OP_CLEAR, which we used as load operation for the color
-                // attachment. I've defined the clear color to simply be black with 100% opacity.
-                .setClearValueCount(static_cast<uint32_t>(clearValues.size()))
-                .setPClearValues(clearValues.data());
-
-            // The render pass can now begin. All of the functions that record commands can be
-            // recognized by their vkCmd prefix. They all return void, so there will be no error
-            // handling until we've finished recording.
-            // The first parameter for every command is always the command buffer to record the
-            // command to. The second parameter specifies the details of the render pass we've just
-            // provided. The final parameter controls how the drawing commands within the render
-            // pass will be provided. It can have one of two values:
-            //  - VK_SUBPASS_CONTENTS_INLINE: The render pass commands will be embedded in the
-            //    primary command buffer itself and no secondary command buffers will be executed.
-            //  - VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS: The render pass commands will be
-            //    executed from secondary command buffers.
-            // We will not be using secondary command buffers, so we'll go with the first option.
-            recordCommandBufferRenderPass(
-              command_buffer, renderpassinfo, vk::SubpassContents::eInline, [=]() {
-                  // The second parameter specifies if the pipeline object is a graphics or compute
-                  // pipeline. We've now told Vulkan which operations to execute in the graphics
-                  // pipeline and which attachment to use in the fragment shader, so all that
-                  // remains is telling it to draw the triangle:
-                  command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
-                                              m_graphics_pipeline);
-
-                  /*
-                   * A couple steps here missing that I see in Sascha's Descriptor Sets example.
-                   * 1) Set viewport: VkViewport viewport =
-                   *vks::initializers::viewport((float)width, (float)height, 0.0f, 1.0f);
-                   *										   vkCmdSetViewport(drawCmdBuffers[i],
-                   *0, 1, &viewport); 2) Set Scissor: VkRect2D scissor =
-                   *vks::initializers::rect2D(width, height, 0, 0);
-                   *					vkCmdSetScissor(drawCmdBuffers[i], 0, 1,
-                   *&scissor);
-                   */
-
-                  for (auto& mesh : m_meshes) {
-
-                      std::vector<vk::Buffer>     vertexbuffers = { mesh.vertex_buffer };
-                      std::vector<vk::DeviceSize> offsets       = { 0 };
-
-                      command_buffer.bindVertexBuffers(0, 1, vertexbuffers.data(), offsets.data());
-                      command_buffer.bindIndexBuffer(mesh.index_buffer, 0, vk::IndexType::eUint32);
-
-                      // Unlike vertex and index buffers, descriptor sets are not unique to graphics
-                      // pipelines. Therefore we need to specify if we want to bind descriptor sets
-                      // to the graphics or compute pipeline. The first parameter is the layout that
-                      // the descriptors are based on. The next three parameters specify the index
-                      // of the first descriptor set, the number of sets to bind, and the array of
-                      // sets to bind. We'll get back to this in a moment. The last two parameters
-                      // specify an array of offsets that are used for dynamic descriptors. We'll
-                      // look at these in a future chapter.
-                      command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                                        m_pipeline_layout, 0, 1,
-                                                        &mesh.descriptor_set, 0, nullptr);
-
-                      // The actual vkCmdDraw function is a bit anticlimactic, but it's so simple
-                      // because of all the information we specified in advance. It has the
-                      // following parameters, aside from the command buffer:
-                      // - vertexCount: Even though we don't have a vertex buffer, we technically
-                      // still have
-                      // 3
-                      //   vertices to draw.
-                      // - instanceCount: Used for instanced rendering, use 1 if you're not
-                      //   doing that.
-                      // - firstVertex: Used as an offset into the vertex buffer, defines the lowest
-                      //   value of gl_VertexIndex.
-                      // - firstInstance: Used as an offset for instanced rendering,
-                      //   defines the lowest value of gl_InstanceIndex.
-                      // command_buffer.draw((uint32_t)triangle_vertices.size(), 1, 0, 0);
-
-                      // A call to this function is very similar to vkCmdDraw. The first two
-                      // parameters specify the number of indices and the number of instances. We're
-                      // not using instancing, so just specify 1 instance. The number of indices
-                      // represents the number of vertices that will be passed to the vertex buffer.
-                      // The next parameter specifies an offset into the index buffer, using a value
-                      // of 1 would cause the graphics card to start reading at the second index.
-                      // The second to last parameter specifies an offset to add to the indices in
-                      // the index buffer. The final parameter specifies an offset for instancing,
-                      // which we're not using.
-                      command_buffer.drawIndexed(mesh.num_indices, 1, 0, 0, 0);
-                  }
-              });
-        });
-    }
 }
 
 /*
@@ -1771,6 +1753,16 @@ renderer::createSemaphores()
         m_image_available_semaphores.push_back(m_device.createSemaphore(vk::SemaphoreCreateInfo()));
         m_render_finished_semaphores.push_back(m_device.createSemaphore(vk::SemaphoreCreateInfo()));
     }
+
+    m_present_complete = m_device.createSemaphore(vk::SemaphoreCreateInfo());
+    m_render_complete  = m_device.createSemaphore(vk::SemaphoreCreateInfo());
+
+    m_submit_info = vk::SubmitInfo()
+                      .setPWaitDstStageMask(&m_submit_pipeline_stages)
+                      .setWaitSemaphoreCount(1)
+                      .setPWaitSemaphores(&m_present_complete)
+                      .setSignalSemaphoreCount(1)
+                      .setPSignalSemaphores(&m_render_complete);
 }
 
 /*
@@ -1783,12 +1775,220 @@ https://www.khronos.org/registry/vulkan/specs/1.0-wsi_extensions/html/vkspec.htm
 void
 renderer::createFences()
 {
-    for (uint32_t i = 0; i < max_frames_in_flight; ++i) {
-        auto fenceinfo = vk::FenceCreateInfo()
-                           // we create this fence already signalled, which it isn't by default
-                           .setFlags(vk::FenceCreateFlagBits::eSignaled);
-        m_in_flight_fences.push_back(m_device.createFence(fenceinfo));
+    // we create this fence already signalled, which it isn't by default
+    auto fenceinfo = vk::FenceCreateInfo().setFlags(vk::FenceCreateFlagBits::eSignaled);
+
+    m_in_flight_fences.reserve(static_cast<uint32_t>(m_command_buffers.size()));
+    for (uint32_t i = 0; i < m_command_buffers.size(); ++i) {
+        m_in_flight_fences.emplace_back(m_device.createFence(fenceinfo));
     }
+}
+
+void
+renderer::buildCommandBuffers()
+{
+    // We begin recording a command buffer by calling vkBeginCommandBuffer with a small
+    // VkCommandBufferBeginInfo structure as argument that specifies some details about the usage of
+    // this specific command buffer.whereupon which we can use vkCmd*-named calls to record draw
+    // commands/dispatch compute commands
+
+    for (size_t i = 0; i < m_command_buffers.size(); ++i) {
+        auto const& command_buffer = m_command_buffers[i];
+
+        // The flags parameter specifies how we're going to use the command buffer. The
+        // following values are available:
+        //  - VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: The command buffer will be rerecorded
+        //    right after executing it once.
+        //  - VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT:
+        //    This is a secondary command buffer that will be entirely within a single render
+        //    pass.
+        //  - VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT: The command buffer can be
+        //    resubmitted while it is also already pending execution.
+        // We have used the last flag because we may already be scheduling the drawing commands
+        // for the next frame while the last frame is not finished yet.
+        auto begininfo = vk::CommandBufferBeginInfo();
+        //.setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse);
+
+        /*The range of depths in the depth buffer is 0.0 to 1.0 in Vulkan, where 1.0 lies at the
+         * far view plane and 0.0 at the near view plane. The initial value at each point in the
+         * depth buffer should be the furthest possible depth, which is 1.0.*/
+        std::array<vk::ClearValue, 2> clearValues = {};
+        clearValues[0].setColor(vk::ClearColorValue(backgroundColor));
+        clearValues[1].setDepthStencil(vk::ClearDepthStencilValue(1.0f, 0));
+
+        recordCommandBuffer(command_buffer, begininfo, [=]() {
+            // Set target frame buffer
+            auto const& framebuffer = m_swapchain_struct.frameBuffers[i];
+            // Render Area
+            auto renderarea = vk::Rect2D(
+              { 0, 0 }, vk::Extent2D(m_swapchain_struct.width, m_swapchain_struct.height));
+
+            // Create Render pass begin info
+            auto renderpassinfo =
+              vk::RenderPassBeginInfo()
+                // The first parameters are the render pass itself and the attachments to bind. We
+                // created a framebuffer for each swap chain image that specifies it as color
+                // attachment.
+                .setRenderPass(m_render_pass)
+                .setFramebuffer(framebuffer)
+                // The render area defines where shader loads and stores will take place. The pixels
+                // outside this region will have undefined values. It should match the size of the
+                // attachments for best performance.
+                .setRenderArea(renderarea)
+                // The last two parameters define the clear values to use for
+                // VK_ATTACHMENT_LOAD_OP_CLEAR, which we used as load operation for the color
+                // attachment. I've defined the clear color to simply be black with 100% opacity.
+                .setClearValueCount(static_cast<uint32_t>(clearValues.size()))
+                .setPClearValues(clearValues.data());
+
+            // The render pass can now begin. All of the functions that record commands can be
+            // recognized by their vkCmd prefix. They all return void, so there will be no error
+            // handling until we've finished recording.
+            // The first parameter for every command is always the command buffer to record the
+            // command to. The second parameter specifies the details of the render pass we've
+            // just provided. The final parameter controls how the drawing commands within the
+            // render pass will be provided. It can have one of two values:
+            //  - VK_SUBPASS_CONTENTS_INLINE: The render pass commands will be embedded in the
+            //    primary command buffer itself and no secondary command buffers will be executed.
+            //  - VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS: The render pass commands will be
+            //    executed from secondary command buffers.
+            // We will not be using secondary command buffers, so we'll go with the first option.
+            recordCommandBufferRenderPass(
+              command_buffer, renderpassinfo, vk::SubpassContents::eInline, [=]() {
+                  // Setup the Viewport, Scissor, and Device Size offsets
+                  auto viewport =
+                    vk::Viewport(0.0f, 0.0f, (float)m_win_width, (float)m_win_height, 0.0f, 1.0f);
+                  command_buffer.setViewport(0, 1, &viewport);
+
+                  auto scissor =
+                    vk::Rect2D(vk::Offset2D(0, 0), vk::Extent2D(m_win_width, m_win_height));
+                  command_buffer.setScissor(0, 1, &scissor);
+
+                  vk::DeviceSize offsets[1] = { 0 };
+                  command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                                    m_pipeline_layouts.deferred, 0, 1,
+                                                    &m_offscreen_quads.descriptor_set, 0, NULL);
+
+                  // TODO: Add debugdisplay boolean that allows us to set debug view
+
+
+                  // Final composition is a full screen quad
+                  command_buffer.bindVertexBuffers(0, 1, &m_offscreen_quads.vertex_buffer, offsets);
+                  // The second parameter specifies if the pipeline object is a graphics or
+                  // compute pipeline. We've now told Vulkan which operations to execute in the
+                  // graphics pipeline and which attachment to use in the fragment shader, so all
+                  // that remains is telling it to draw the triangle:
+                  command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                                              m_graphics_pipelines.deferred);
+                  command_buffer.bindIndexBuffer(m_offscreen_quads.index_buffer, 0,
+                                                 vk::IndexType::eUint32);
+                  command_buffer.drawIndexed(m_offscreen_quads.num_indices, 1, 0, 0, 1);
+
+                  /* NOTE: Everything below here is the previous version of how we bound each mesh
+                   * to the Render pass. Instead we are now using a single quad for the final pass.
+                   * this quad is full screen.
+                   */
+                  // Unlike vertex and index buffers, descriptor sets are not unique to
+                  // graphics pipelines. Therefore we need to specify if we want to bind
+                  // descriptor sets to the graphics or compute pipeline. The first parameter
+                  // is the layout that the descriptors are based on. The next three
+                  // parameters specify the index of the first descriptor set, the number of
+                  // sets to bind, and the array of sets to bind. We'll get back to this in a
+                  // moment. The last two parameters specify an array of offsets that are used
+                  // for dynamic descriptors. We'll look at these in a future chapter.
+
+                  // The actual vkCmdDraw function is a bit anticlimactic, but it's so simple
+                  // because of all the information we specified in advance. It has the
+                  // following parameters, aside from the command buffer:
+                  // - vertexCount: Even though we don't have a vertex buffer, we technically
+                  // still have
+                  // 3
+                  //   vertices to draw.
+                  // - instanceCount: Used for instanced rendering, use 1 if you're not
+                  //   doing that.
+                  // - firstVertex: Used as an offset into the vertex buffer, defines the
+                  // lowest
+                  //   value of gl_VertexIndex.
+                  // - firstInstance: Used as an offset for instanced rendering,
+                  //   defines the lowest value of gl_InstanceIndex.
+                  // A call to this function is very similar to vkCmdDraw. The first two
+                  // parameters specify the number of indices and the number of instances.
+                  // We're not using instancing, so just specify 1 instance. The number of
+                  // indices represents the number of vertices that will be passed to the
+                  // vertex buffer. The next parameter specifies an offset into the index
+                  // buffer, using a value of 1 would cause the graphics card to start reading
+                  // at the second index. The second to last parameter specifies an offset to
+                  // add to the indices in the index buffer. The final parameter specifies an
+                  // offset for instancing, which we're not using.
+              });
+        });
+    }
+}
+
+void
+renderer::buildDeferredCommandBuffer()
+{
+    if (!m_offscreen_commandbuffer) {
+        m_offscreen_commandbuffer = createCommandBuffer(vk::CommandBufferLevel::ePrimary, false);
+    }
+
+    // Create a semaphore used to syncrhonize offscreen rendering and usage
+    auto semaphoreCreateInfo = vk::SemaphoreCreateInfo();
+    m_device.createSemaphore(&semaphoreCreateInfo, nullptr, &m_offscreen_semaphore);
+
+    // Clear valus for all attachments written in the fragment shader
+    std::array<float, 4> color = { 0.f, 0.f, 0.f, 0.f };
+
+    std::array<vk::ClearValue, 4> clearValues = {};
+    clearValues[0].setColor(color);
+    clearValues[1].setColor(color);
+    clearValues[2].setColor(color);
+    clearValues[3].setDepthStencil(vk::ClearDepthStencilValue(1.0f, 0));
+
+    auto renderarea = vk::Rect2D(
+      { 0, 0 }, vk::Extent2D(m_offscreen_framebuffer.width, m_offscreen_framebuffer.height));
+
+    auto cmdBufinfo = vk::CommandBufferBeginInfo();
+
+    auto renderPassBeginInfo = vk::RenderPassBeginInfo()
+                                 .setRenderPass(m_offscreen_framebuffer.renderPass)
+                                 .setFramebuffer(m_offscreen_framebuffer.frameBuffer)
+                                 .setRenderArea(renderarea)
+                                 .setClearValueCount(static_cast<uint32_t>(clearValues.size()))
+                                 .setPClearValues(clearValues.data());
+
+    // Record Command Buffer
+    auto const& command_buffer = m_offscreen_commandbuffer;
+
+    recordCommandBuffer(command_buffer, cmdBufinfo, [=]() {
+        recordCommandBufferRenderPass(
+          command_buffer, renderPassBeginInfo, vk::SubpassContents::eInline, [=]() {
+              // Setup the Viewport, Scissor, and Device Size offsets
+              auto viewport =
+                vk::Viewport(0.0f, 0.0f, (float)m_win_width, (float)m_win_height, 0.0f, 1.0f);
+              command_buffer.setViewport(0, 1, &viewport);
+
+              auto scissor =
+                vk::Rect2D(vk::Offset2D(0, 0), vk::Extent2D(m_win_width, m_win_height));
+              command_buffer.setScissor(0, 1, &scissor);
+
+              vk::DeviceSize offsets[1] = { 0 };
+              command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                                          m_graphics_pipelines.offscreen);
+              for (auto mesh : m_meshes) {
+                  std::vector<vk::Buffer> vertexbuffers = { mesh.vertex_buffer };
+                  command_buffer.bindVertexBuffers(0, 1, vertexbuffers.data(), offsets);
+                  command_buffer.bindIndexBuffer(mesh.index_buffer, 0, vk::IndexType::eUint32);
+                  command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                                    m_pipeline_layouts.offscreen, 0, 1,
+                                                    &mesh.descriptor_set, 0, NULL);
+                  // Note: This is where I can set number of instanced meshes
+                  command_buffer.drawIndexed(mesh.num_indices, 3, 0, 0, 0);
+              }
+          });
+    });
+
+    // Meshes
 }
 
 /*
@@ -1801,122 +2001,6 @@ almost everything and memory management is one of those things.
 
 https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#vkCreateBuffer
 */
-
-void
-renderer::createVertexBuffers()
-{
-    for (auto& mesh : m_meshes) {
-        /*
-
-vk::DeviceSize size = sizeof(decltype(mesh.vertices)::value_type) * mesh.vertices.size();
-
-// vk::Buffer       stagingbuffer;
-// vk::DeviceMemory stagingbuffermemory;
-
-auto [stagingbuffer, stagingbuffermemory] = createBuffer(
-  size, vk::BufferUsageFlagBits::eTransferSrc,
-  vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-// Now we copy the triangle vertex data into the buffer
-// You can now simply memcpy the vertex data to the mapped memory and unmap it again using
-// vkUnmapMemory. Unfortunately the driver may not immediately copy the data into the buffer
-// memory, for example because of caching. It is also possible that writes to the buffer are
-// not visible in the mapped memory yet. There are two ways to deal with that problem:
-//  - Use a memory heap that is host coherent, indicated with
-//  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-//  - Call vkFlushMappedMemoryRanges to after writing to the mapped memory, and call
-//  vkInvalidateMappedMemoryRanges before reading from the mapped memory
-// We went for the first approach, which ensures that the mapped memory always matches the
-// contents of the allocated memory. Do keep in mind that this may lead to slightly worse
-// performance than explicit flushing, but we'll see why that doesn't matter in the next
-// chapter.
-// {
-//     void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
-//     std::memcpy(data, triangle_vertices.data(), size);
-//     m_device.unmapMemory(stagingbuffermemory);
-// }
-
-withMappedMemory(stagingbuffermemory, 0, size,
-                 [=](void* data) { std::memcpy(data, mesh.vertices.data(), size); });
-
-// The vertexBuffer is now allocated from a memory type that is device local, which
-// generally means that we're not able to use vkMapMemory. However, we can copy data from
-// the stagingBuffer to the vertexBuffer (using copyBuffer()). We have to indicate that we
-// intend to do that by specifying the transfer source flag for the stagingBuffer and the
-// transfer destination flag for the vertexBuffer, along with the vertex buffer usage flag.
-std::tie(mesh.vertex_buffer, mesh.vertex_buffer_memory) = createBuffer(
-  size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-  vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-copyBuffer(stagingbuffer, &mesh.vertex_buffer, size);
-
-m_device.destroyBuffer(stagingbuffer);
-m_device.freeMemory(stagingbuffermemory);
-
-// All that remains now is binding the vertex buffer during rendering operations.
-        */
-    }
-}
-
-/*
-We do exactly the same thing we did for createVertexBuffer and do it for indices instead
-*/
-void
-renderer::createIndexBuffers()
-{
-    for (auto& mesh : m_meshes) {
-        /*
-vk::DeviceSize size = sizeof(decltype(mesh.indices)::value_type) * mesh.indices.size();
-
-// vk::Buffer       stagingbuffer;
-// vk::DeviceMemory stagingbuffermemory;
-
-auto [stagingbuffer, stagingbuffermemory] = createBuffer(
-  size, vk::BufferUsageFlagBits::eTransferSrc,
-  vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-// {
-//     void* data = m_device.mapMemory(stagingbuffermemory, 0, size);
-//     std::memcpy(data, triangle_indices.data(), size);
-//     m_device.unmapMemory(stagingbuffermemory);
-// }
-
-withMappedMemory(stagingbuffermemory, 0, size,
-                 [=](void* data) { std::memcpy(data, mesh.indices.data(), size); });
-
-std::tie(mesh.index_buffer, mesh.index_buffer_memory) = createBuffer(
-  size, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
-  vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-copyBuffer(stagingbuffer, &mesh.index_buffer, size);
-
-m_device.destroyBuffer(stagingbuffer);
-m_device.freeMemory(stagingbuffermemory);
-
-// All that remains now is binding the index buffer during rendering operations.
-        */
-    }
-}
-
-/*
-Much like vertex and index buffers, we have a buffer for uniform values
-*/
-void
-renderer::createUniformBuffers()
-{
-    vk::DeviceSize buffersize = sizeof(uniformbufferobject);
-
-    std::tie(m_uniform_buffer, m_uniform_buffer_memory) = createBuffer(
-      buffersize, vk::BufferUsageFlagBits::eUniformBuffer,
-      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-    /*
-for (auto& mesh : m_meshes) {
-    std::tie(mesh.uniform_buffer, mesh.uniform_buffer_memory) = createBuffer(
-      buffersize, vk::BufferUsageFlagBits::eUniformBuffer,
-      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-}*/
-}
 
 void
 renderer::createVertexBuffer(Mesh& mesh, const std::vector<Vertex> vertices)
@@ -2013,8 +2097,8 @@ renderer::createUniformBuffer(Mesh& mesh, const vk::DeviceSize buffersize)
 void
 renderer::prepareOffscreenFramebuffer()
 {
-    m_offscreen_framebuffer.width  = FB_DIM;
-    m_offscreen_framebuffer.height = FB_DIM;
+    m_offscreen_framebuffer.width  = m_win_width;
+    m_offscreen_framebuffer.height = m_win_height;
 
     // Color attachments
 
@@ -2111,7 +2195,33 @@ renderer::prepareOffscreenFramebuffer()
       .setDependencyCount(2)
       .setPDependencies(dependencies.data());
 
-    m_device.createRenderPass(&renderPassInfo, nullptr, &m_offscreen_framebuffer.renderPass);
+    // m_device.createRenderPass(&renderPassInfo, nullptr, &m_offscreen_framebuffer.renderPass);
+
+    if (!(m_offscreen_framebuffer.renderPass = m_device.createRenderPass(renderPassInfo))) {
+        std::runtime_error("Error creating Offscreen Render Pass!\n");
+    }
+
+    // Create framebuffer
+    std::array<vk::ImageView, 4> attachments;
+    attachments[0] = m_offscreen_framebuffer.position.image_view;
+    attachments[1] = m_offscreen_framebuffer.normal.image_view;
+    attachments[2] = m_offscreen_framebuffer.albedo.image_view;
+    attachments[3] = m_offscreen_framebuffer.depth.image_view;
+
+    auto fbufCreateInfo = vk::FramebufferCreateInfo()
+                            .setPNext(NULL)
+                            .setRenderPass(m_offscreen_framebuffer.renderPass)
+                            .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+                            .setPAttachments(attachments.data())
+                            .setWidth(m_offscreen_framebuffer.width)
+                            .setHeight(m_offscreen_framebuffer.height)
+                            .setLayers(1);
+
+    // m_device.createFramebuffer(&fbufCreateInfo, nullptr, &m_offscreen_framebuffer.frameBuffer);
+
+    if (!(m_offscreen_framebuffer.frameBuffer = m_device.createFramebuffer(fbufCreateInfo))) {
+        std::runtime_error("Error creating Offscreen Render Pass!\n");
+    }
 
     // Create Sampler to sample from the color attachments
     vk::SamplerCreateInfo sampler = vk::SamplerCreateInfo();
@@ -2126,7 +2236,51 @@ renderer::prepareOffscreenFramebuffer()
       .setMinLod(0.0f)
       .setMaxLod(1.0f)
       .setBorderColor(vk::BorderColor::eFloatOpaqueWhite);
-    m_device.createSampler(&sampler, nullptr, &m_color_sampler);
+    // m_device.createSampler(&sampler, nullptr, &m_color_sampler);
+
+    if (!(m_color_sampler = m_device.createSampler(sampler))) {
+        std::runtime_error("Error creating Offscreen Render Pass!\n");
+    }
+}
+
+void
+renderer::prepareUniformBuffers()
+{
+    // NOTE: The reason why I don't use the createUniformBuffer
+    // helper function is simply because the uniform buffers
+    // here are not full on meshes.
+
+    // Fullscreen vertex shader
+    std::tie(m_uniform_buffers.vsFullScreen, m_uniform_buffers.vsFullScreen_mem) = createBuffer(
+      sizeof(uboVS), vk::BufferUsageFlagBits::eUniformBuffer,
+      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    // Deferred vertex shader
+    std::tie(m_uniform_buffers.vsOffScreen, m_uniform_buffers.vsOffScreen_mem) = createBuffer(
+      sizeof(uboOffscreenVS), vk::BufferUsageFlagBits::eUniformBuffer,
+      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    // Deferred fragment shader
+    std::tie(m_uniform_buffers.fsLights, m_uniform_buffers.fsLights_mem) = createBuffer(
+      sizeof(uboFragmentLights), vk::BufferUsageFlagBits::eUniformBuffer,
+      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+    // Maybe need to call mapmemory
+    m_uniform_buffers.vsFullScreen_map =
+      m_device.mapMemory(m_uniform_buffers.vsFullScreen_mem, 0, sizeof(uboVS));
+    m_uniform_buffers.vsOffScreen_map =
+      m_device.mapMemory(m_uniform_buffers.vsOffScreen_mem, 0, sizeof(uboOffscreenVS));
+    m_uniform_buffers.fsLights_map =
+      m_device.mapMemory(m_uniform_buffers.fsLights_mem, 0, sizeof(uboFragmentLights));
+
+    // Init ubo values
+    uboOffscreenVS.instancePos[0] = glm::vec4(0.0f);
+    uboOffscreenVS.instancePos[1] = glm::vec4(-4.0f, 0.0, -4.0f, 0.0f);
+    uboOffscreenVS.instancePos[2] = glm::vec4(4.0f, 0.0, -4.0f, 0.0f);
+
+    // Update
+    updateUniformBuffer();
+    updateUniformBuffersScreen();
+    updateUniformBufferDeferredMatrices();
+    updateUniformBufferDeferredLights();
 }
 
 
@@ -2137,8 +2291,9 @@ just like we had to do for every vertex attribute and its location index.
 void
 renderer::createDescriptorSetLayout()
 {
-    std::array<vk::DescriptorSetLayoutBinding, 2> setLayoutBindings{};
+    std::array<vk::DescriptorSetLayoutBinding, 5> setLayoutBindings{};
 
+    // Binding 0: Vertex shader uniform buffer
     setLayoutBindings[0] =
       vk::DescriptorSetLayoutBinding()
         // The first two fields specify the `binding` used in the shader and
@@ -2156,18 +2311,58 @@ renderer::createDescriptorSetLayout()
         // vertex shader.
         .setStageFlags(vk::ShaderStageFlagBits::eVertex);
 
+    // Binding 1: Position texture target / Scene colormap
     setLayoutBindings[1] = vk::DescriptorSetLayoutBinding()
                              .setBinding(1)
                              .setDescriptorCount(1)
                              .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-                             .setStageFlags(vk::ShaderStageFlagBits::eFragment)
-                             .setPImmutableSamplers(nullptr);
+                             .setStageFlags(vk::ShaderStageFlagBits::eFragment);
+    //.setPImmutableSamplers(nullptr);
 
+    // Binding 2: Normals texture target
+    setLayoutBindings[2] = vk::DescriptorSetLayoutBinding()
+                             .setBinding(2)
+                             .setDescriptorCount(1)
+                             .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                             .setStageFlags(vk::ShaderStageFlagBits::eFragment);
+
+    // Binding 3: Albedo texture target
+    setLayoutBindings[3] = vk::DescriptorSetLayoutBinding()
+                             .setBinding(3)
+                             .setDescriptorCount(1)
+                             .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                             .setStageFlags(vk::ShaderStageFlagBits::eFragment);
+
+    // Binding 4: Fragment shader uniform buffer
+    setLayoutBindings[4] = vk::DescriptorSetLayoutBinding()
+                             .setBinding(4)
+                             .setDescriptorCount(1)
+                             .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+                             .setStageFlags(vk::ShaderStageFlagBits::eFragment);
+
+    // Pack it all into Descriptor Set Layout Create Info
     auto layoutinfo = vk::DescriptorSetLayoutCreateInfo()
                         .setBindingCount(static_cast<uint32_t>(setLayoutBindings.size()))
                         .setPBindings(setLayoutBindings.data());
 
     if (!(m_descriptor_set_layout = m_device.createDescriptorSetLayout(layoutinfo))) {
+        throw std::runtime_error("failed to create descriptor set layout1");
+    }
+
+
+    // You can use uniform values in shaders, which are globals similar to dynamic state variables
+    // that can be changed at drawing time to alter the behavior of your shaders without having to
+    // recreate them. They are commonly used to pass the transformation matrix to the vertex shader,
+    // or to create texture samplers in the fragment shader.
+    // These uniform values need to be specified during pipeline creation by creating a
+    // VkPipelineLayout object.
+    auto pipelinelayout =
+      vk::PipelineLayoutCreateInfo().setSetLayoutCount(1).setPSetLayouts(&m_descriptor_set_layout);
+
+    if (!(m_pipeline_layouts.deferred = m_device.createPipelineLayout(pipelinelayout))) {
+        throw std::runtime_error("failed to create descriptor set layout1");
+    }
+    if (!(m_pipeline_layouts.offscreen = m_device.createPipelineLayout(pipelinelayout))) {
         throw std::runtime_error("failed to create descriptor set layout1");
     }
 }
@@ -2190,19 +2385,20 @@ void
 renderer::createDescriptorPool()
 {
     std::array<vk::DescriptorPoolSize, 2> descriptorPoolSizes = {};
-    // Uniform buffers : 1 for scene and 1 per object (scene and local matrices)
-    descriptorPoolSizes[0]
-      .setType(vk::DescriptorType::eUniformBuffer)
-      .setDescriptorCount(1 + static_cast<uint32_t>(m_meshes.size()));
-    // Combined image samples : 1 per mesh texture
+    // Uniform buffers : 3 for scene UBOs and 1 per object (scene and local matrices)
+    descriptorPoolSizes[0].setType(vk::DescriptorType::eUniformBuffer).setDescriptorCount(20);
+    //.setDescriptorCount(5 + static_cast<uint32_t>(m_meshes.size()));
+    // Combined image samples : 4 for the render targets, 1 per mesh texture
     descriptorPoolSizes[1]
       .setType(vk::DescriptorType::eCombinedImageSampler)
-      .setDescriptorCount(static_cast<uint32_t>(m_meshes.size()));
+      .setDescriptorCount(20);
+    //.setDescriptorCount(4 + static_cast<uint32_t>(m_meshes.size()));
 
     auto poolinfo = vk::DescriptorPoolCreateInfo()
                       .setPoolSizeCount(static_cast<uint32_t>(descriptorPoolSizes.size()))
                       .setPPoolSizes(descriptorPoolSizes.data())
-                      .setMaxSets(static_cast<uint32_t>(descriptorPoolSizes.size()));
+                      .setMaxSets(3);
+    //.setMaxSets(static_cast<uint32_t>(descriptorPoolSizes.size()));
 
     if (!(m_descriptor_pool = m_device.createDescriptorPool(poolinfo))) {
         throw std::runtime_error("failed to create descriptor pool!");
@@ -2225,6 +2421,82 @@ renderer::createDescriptorSet()
                        .setDescriptorPool(m_descriptor_pool)
                        .setDescriptorSetCount((uint32_t)layouts.size())
                        .setPSetLayouts(layouts.data());
+
+    // m_offscreen_quads.descriptor_set = m_device.allocateDescriptorSets(allocinfo).front();
+
+    if (!(m_offscreen_quads.descriptor_set = m_device.allocateDescriptorSets(allocinfo).front())) {
+        std::runtime_error("Error allocating descriptor sets!\n");
+    }
+
+    // Buffer descriptor for offscreen quad
+    m_uniform_buffers.vsFullscreen_des = vk::DescriptorBufferInfo()
+                                           .setBuffer(m_offscreen_quads.uniform_buffer)
+                                           .setOffset(0)
+                                           .setRange(sizeof(uniformbufferobject));
+
+
+    m_uniform_buffers.fsLights_des = vk::DescriptorBufferInfo()
+                                       .setBuffer(m_offscreen_quads.uniform_buffer)
+                                       .setOffset(0)
+                                       .setRange(sizeof(uniformbufferobject));
+
+    // Image descriptors for the offscreen color attachments
+    auto texDescriptorPosition = vk::DescriptorImageInfo()
+                                   .setSampler(m_color_sampler)
+                                   .setImageView(m_offscreen_framebuffer.position.image_view)
+                                   .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    auto texDescriptorAlbedo = vk::DescriptorImageInfo()
+                                 .setSampler(m_color_sampler)
+                                 .setImageView(m_offscreen_framebuffer.albedo.image_view)
+                                 .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    auto texDescriptorNormal = vk::DescriptorImageInfo()
+                                 .setSampler(m_color_sampler)
+                                 .setImageView(m_offscreen_framebuffer.normal.image_view)
+                                 .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    std::vector<vk::WriteDescriptorSet> writeDescriptorSets = {
+        // Binding 0: Vertex shader uniform buffer
+        vk::WriteDescriptorSet()
+          .setDstBinding(0)
+          .setPBufferInfo(&m_uniform_buffers.vsFullscreen_des)
+          .setDstSet(m_offscreen_quads.descriptor_set)
+          .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+          .setDescriptorCount(1),
+        // Binding 1: Position texture target
+        vk::WriteDescriptorSet()
+          .setDstBinding(1)
+          .setPImageInfo(&texDescriptorPosition)
+          .setDstSet(m_offscreen_quads.descriptor_set)
+          .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+          .setDescriptorCount(1),
+        // Binding 2: Normals texture target
+        vk::WriteDescriptorSet()
+          .setDstBinding(2)
+          .setPImageInfo(&texDescriptorNormal)
+          .setDstSet(m_offscreen_quads.descriptor_set)
+          .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+          .setDescriptorCount(1),
+        // Binding 3: Albedo texture target
+        vk::WriteDescriptorSet()
+          .setDstBinding(3)
+          .setPImageInfo(&texDescriptorAlbedo)
+          .setDstSet(m_offscreen_quads.descriptor_set)
+          .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+          .setDescriptorCount(1),
+        // Binding 4: Fragment shader uniform buffer
+        vk::WriteDescriptorSet()
+          .setDstBinding(4)
+          .setPBufferInfo(&m_uniform_buffers.fsLights_des)
+          .setDstSet(m_offscreen_quads.descriptor_set)
+          .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+          .setDescriptorCount(1)
+    };
+
+    m_device.updateDescriptorSets(static_cast<uint32_t>(writeDescriptorSets.size()),
+                                  writeDescriptorSets.data(), 0, NULL);
+
     /*
 // NOTE: This returns a vector, not a single set
 // NOTE: This call of allocateDescriptorSets causes an error message of a failure to
@@ -2268,34 +2540,47 @@ m_device.updateDescriptorSets(static_cast<uint32_t>(ddescriptorWrites.size()),
                               ddescriptorWrites.data(), 0, nullptr);*/
     for (auto& mesh : m_meshes) {
 
-        mesh.descriptor_set = m_device.allocateDescriptorSets(allocinfo).front();
+        if (!(mesh.descriptor_set = m_device.allocateDescriptorSets(allocinfo).front())) {
+            std::runtime_error("Error allocating Mesh descriptor set!");
+        }
 
-        auto buffer_info = vk::DescriptorBufferInfo()
+        mesh.buffer_info = vk::DescriptorBufferInfo()
                              .setBuffer(mesh.uniform_buffer)
-                             //.setBuffer(m_uniform_buffer)
                              .setOffset(0)
                              .setRange(sizeof(uniformbufferobject));
 
-        auto image_info = vk::DescriptorImageInfo()
-                            .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
-                            .setImageView(mesh.texture.image_view)
-                            .setSampler(mesh.texture.sampler);
+        mesh.diffuse_tex.descriptor = vk::DescriptorImageInfo()
+                                        .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
+                                        .setImageView(mesh.diffuse_tex.image_view)
+                                        .setSampler(mesh.diffuse_tex.sampler);
 
-        std::array<vk::WriteDescriptorSet, 2> descriptorWrites = {};
+        mesh.normal_tex.descriptor = vk::DescriptorImageInfo()
+                                       .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
+                                       .setImageView(mesh.normal_tex.image_view)
+                                       .setSampler(mesh.normal_tex.sampler);
+
+        std::array<vk::WriteDescriptorSet, 3> descriptorWrites = {};
+        // Binding 0: Vertex shader uniform buffer
         descriptorWrites[0]
           .setDstSet(mesh.descriptor_set)
           .setDstBinding(0)
-          .setDstArrayElement(0)
           .setDescriptorType(vk::DescriptorType::eUniformBuffer)
           .setDescriptorCount(1)
-          .setPBufferInfo(&buffer_info);
+          .setPBufferInfo(&mesh.buffer_info);
+        // Binding 1: Color map
         descriptorWrites[1]
           .setDstSet(mesh.descriptor_set)
           .setDstBinding(1)
-          .setDstArrayElement(0)
           .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
           .setDescriptorCount(1)
-          .setPImageInfo(&image_info);
+          .setPImageInfo(&mesh.diffuse_tex.descriptor);
+        // Binding 0: Normal map
+        descriptorWrites[2]
+          .setDstSet(mesh.descriptor_set)
+          .setDstBinding(2)
+          .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+          .setDescriptorCount(1)
+          .setPImageInfo(&mesh.normal_tex.descriptor);
 
         m_device.updateDescriptorSets(static_cast<uint32_t>(descriptorWrites.size()),
                                       descriptorWrites.data(), 0, nullptr);
@@ -2466,13 +2751,15 @@ renderer::createDepthResources()
 {
     vk::Format depthFormat = findDepthFormat();
 
-    std::tie(m_depth_image, m_depth_image_memory) = createImage(
-      m_swapchain_extent.width, m_swapchain_extent.height, depthFormat, vk::ImageTiling::eOptimal,
-      vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal);
-    m_depth_image_view =
-      createImageView(m_depth_image, depthFormat, vk::ImageAspectFlagBits::eDepth);
+    std::tie(m_offscreen_framebuffer.depth.image, m_offscreen_framebuffer.depth.memory) =
+      createImage(m_swapchain_struct.width, m_swapchain_struct.height, depthFormat,
+                  vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment,
+                  vk::MemoryPropertyFlagBits::eDeviceLocal);
+    m_offscreen_framebuffer.depth.image_view = createImageView(
+      m_offscreen_framebuffer.depth.image, depthFormat, vk::ImageAspectFlagBits::eDepth);
 
-    transitionImageLayout(m_depth_image, depthFormat, vk::ImageLayout::eUndefined,
+    transitionImageLayout(m_offscreen_framebuffer.depth.image, depthFormat,
+                          vk::ImageLayout::eUndefined,
                           vk::ImageLayout::eDepthStencilAttachmentOptimal);
 }
 
@@ -2495,20 +2782,20 @@ renderer::updateUniformBuffer()
     float time =
       std::chrono::duration<float, std::chrono::seconds::period>(current_t - start_t).count();
 
-    uniformbufferobject ubo;
-    ubo.model = glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f, 0.f));
-    ubo.view =
+    // uniformbufferobject ubo;
+    m_camera.model =
+      glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f, 0.f));
+    m_camera.view =
       glm::lookAt(glm::vec3(0.f, 2.f, 7.5f), glm::vec3(0.f, 2.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
-    ubo.proj =
+    m_camera.proj =
       glm::perspective(glm::radians(45.0f),
-                       m_swapchain_extent.width / (float)m_swapchain_extent.height, 0.1f, 100.0f);
+                       m_swapchain_struct.width / (float)m_swapchain_struct.height, 0.1f, 100.0f);
 
     // GLM was originally designed for OpenGL, where the Y coordinate of the clip coordinates is
     // inverted. The easiest way to compensate for that is to flip the sign on the scaling factor of
     // the Y axis in the projection matrix. If you don't do this, then the image will be rendered
     // upside down.
-    // ubo.proj = camera.proj;
-    ubo.proj[1][1] *= -1;
+    m_camera.proj[1][1] *= -1;
 
     // Until I figure out how to map a uniform buffer for the camera, this will just remain
     // commented out
@@ -2517,19 +2804,81 @@ renderer::updateUniformBuffer()
 
     // Update the meshes
     // Imrod translation
-    m_meshes[0].matrices.model = glm::translate(ubo.model, glm::vec3(-2.0f, 0.0f, 0.0f));
+    m_meshes[0].matrices.model = glm::translate(m_camera.model, glm::vec3(-2.0f, 0.0f, 0.0f));
     // Cube translation
-    m_meshes[1].matrices.model = glm::translate(ubo.model, glm::vec3(1.5f, 0.5f, 1.0f));
+    /*m_meshes[1].matrices.model = glm::translate(m_camera.model, glm::vec3(1.5f, 0.5f, 1.0f));
     m_meshes[1].matrices.model = glm::rotate(m_meshes[1].matrices.model, time * glm::radians(60.f),
-                                             glm::vec3(1.0f, 1.0f, 1.0f));
+                                             glm::vec3(1.0f, 1.0f, 1.0f));*/
 
     for (auto& mesh : m_meshes) {
-        mesh.matrices.proj = ubo.proj;
-        mesh.matrices.view = ubo.view;
+        mesh.matrices.proj = m_camera.proj;
+        mesh.matrices.view = m_camera.view;
         withMappedMemory(
           mesh.uniform_buffer_memory, 0, sizeof(uniformbufferobject),
           [=](void* data) { std::memcpy(data, &mesh.matrices, sizeof(uniformbufferobject)); });
     }
+}
+
+void
+renderer::updateUniformBuffersScreen()
+{
+    uboVS.projection = glm::ortho(0.0f, 1.0f, 0.0f, 1.0f, -1.0f, 1.0f);
+    uboVS.model      = glm::mat4(1.0f);
+
+    withMappedMemory(m_uniform_buffers.vsFullScreen_mem, 0, sizeof(uboVS),
+                     [=](void* data) { std::memcpy(data, &uboVS, sizeof(uboVS)); });
+}
+
+void
+renderer::updateUniformBufferDeferredMatrices()
+{
+
+    uboOffscreenVS.projection = m_camera.proj;
+    uboOffscreenVS.view       = m_camera.view;
+    // uboOffscreenVS.model      = m_camera.model;
+    uboOffscreenVS.model = glm::mat4(1.0f);
+
+    withMappedMemory(m_uniform_buffers.vsOffScreen_mem, 0, sizeof(uboOffscreenVS), [=](void* data) {
+        std::memcpy(data, &uboOffscreenVS, sizeof(uboOffscreenVS));
+    });
+}
+
+void
+renderer::updateUniformBufferDeferredLights()
+{
+    // White
+    uboFragmentLights.lights[0].position = glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+    uboFragmentLights.lights[0].color    = glm::vec3(1.5f);
+    uboFragmentLights.lights[0].radius   = 15.0f * 0.25f;
+    // Red
+    uboFragmentLights.lights[1].position = glm::vec4(-2.0f, 0.0f, 0.0f, 0.0f);
+    uboFragmentLights.lights[1].color    = glm::vec3(1.0f, 0.0f, 0.0f);
+    uboFragmentLights.lights[1].radius   = 15.0f;
+    // Blue
+    uboFragmentLights.lights[2].position = glm::vec4(2.0f, 1.0f, 0.0f, 0.0f);
+    uboFragmentLights.lights[2].color    = glm::vec3(0.0f, 0.0f, 2.5f);
+    uboFragmentLights.lights[2].radius   = 5.0f;
+    // Yellow
+    uboFragmentLights.lights[3].position = glm::vec4(0.0f, 0.9f, 0.5f, 0.0f);
+    uboFragmentLights.lights[3].color    = glm::vec3(1.0f, 1.0f, 0.0f);
+    uboFragmentLights.lights[3].radius   = 2.0f;
+    // Green
+    uboFragmentLights.lights[4].position = glm::vec4(0.0f, 0.5f, 0.0f, 0.0f);
+    uboFragmentLights.lights[4].color    = glm::vec3(0.0f, 1.0f, 0.2f);
+    uboFragmentLights.lights[4].radius   = 5.0f;
+    // Yellow
+    uboFragmentLights.lights[5].position = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+    uboFragmentLights.lights[5].color    = glm::vec3(1.0f, 0.7f, 0.3f);
+    uboFragmentLights.lights[5].radius   = 25.0f;
+
+    // Current view position
+    // glm::vec4 camPos = glm::vec4(m_camera.)
+    // Temporarily hard code the camera position
+    uboFragmentLights.viewPos = glm::vec4(0.f, 2.f, 7.5f, 0.f);
+
+    withMappedMemory(m_uniform_buffers.fsLights_mem, 0, sizeof(uboFragmentLights), [=](void* data) {
+        std::memcpy(data, &uboFragmentLights, sizeof(uboFragmentLights));
+    });
 }
 
 
@@ -2545,8 +2894,8 @@ renderer::loadAssets()
 
     // Load models and Textures
     loadModels(all_model_filenames);
-    loadTextures(all_texture_filenames);
-    // m_mesh = m_meshes[0];
+    loadTextures(m_meshes[0], "textures/Imrod_Diffuse.png", "textures/Imrod_norm.png");
+    // loadTextures(all_texture_filenames);
 }
 
 void
@@ -2588,7 +2937,7 @@ renderer::loadObj(std::string objpath) const
             vertex.texcoord = { attrib.texcoords[2 * index.texcoord_index + 0],
                                 1.0f - attrib.texcoords[2 * index.texcoord_index + 1] };
 
-            vertex.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+            vertex.color = { 1.0f, 1.0f, 1.0f };
 
             vertices.push_back(vertex);
             size_t sze = indices.size();
@@ -2713,11 +3062,44 @@ renderer::loadTextures(std::vector<std::string> filenames)
         // For now, we are deriving the texture filenames from hardcoded values.
         // I already have filepaths derived from the fbx loading, but they are not usable without
         // some altering. This I will get done overtime.
-        createTextureImage(filenames[i], mesh.texture);
-        createTextureImageView(mesh.texture);
-        createTextureSampler(mesh.texture);
+        createTextureImage(filenames[i], mesh.diffuse_tex);
+        createTextureImageView(mesh.diffuse_tex);
+        createTextureSampler(mesh.diffuse_tex);
         ++i;
     }
+}
+
+void
+renderer::loadTextures(Mesh& mesh, std::string diffuseFilename, std::string normalFilename)
+{
+    // First create the diffuse Texture2D
+    createTextureImage(diffuseFilename, mesh.diffuse_tex);
+    createTextureImageView(mesh.diffuse_tex);
+    createTextureSampler(mesh.diffuse_tex);
+
+    // Second, create the Normal Texture2D
+    createTextureImage(normalFilename, mesh.normal_tex);
+    createTextureImageView(mesh.normal_tex);
+    createTextureSampler(mesh.normal_tex);
+}
+
+vk::PipelineShaderStageCreateInfo
+renderer::loadShader(const char* entrypoint, std::string fileName, vk::ShaderStageFlagBits stage)
+{
+    const std::string s = "main";
+    const char*       c = s.c_str();
+
+    auto shaderCode  = readFile(fileName);
+    auto shaderStage = vk::PipelineShaderStageCreateInfo()
+                         .setStage(stage)
+                         .setModule(createShaderModule(shaderCode, m_device))
+                         .setPName(entrypoint);
+
+    if (!(shaderStage.module)) {
+        std::runtime_error("Error creating Shader Module: " + fileName);
+    }
+    // m_shader_modules.push_back(shaderStage.module);
+    return shaderStage;
 }
 
 /*
@@ -3183,12 +3565,11 @@ renderer::recreateSwapChain()
 {
     m_device.waitIdle();
 
-    glfwGetFramebufferSize(m_window, &m_win_width, &m_win_height);
-
-    // cleanupSwapChain();
+    // glfwGetFramebufferSize(m_window, &m_win_width, &m_win_height);
+    cleanupSwapChain();
 
     createSwapChain();
-    createImageViews();
+    // createImageViews();
     createRenderPass();
     createGraphicsPipeline();
     createDepthResources();
@@ -3202,26 +3583,29 @@ refer to renderer::recreateSwapChain()
 void
 renderer::cleanupSwapChain()
 {
-    m_device.destroyImageView(m_depth_image_view);
-    m_device.destroyImage(m_depth_image);
-    m_device.freeMemory(m_depth_image_memory);
+    m_device.destroyImageView(m_offscreen_framebuffer.depth.image_view);
+    m_device.destroyImage(m_offscreen_framebuffer.depth.image);
+    m_device.freeMemory(m_offscreen_framebuffer.depth.memory);
 
-    for (auto& framebuffer : m_swapchain_framebuffers) {
+    for (auto& framebuffer : m_swapchain_struct.frameBuffers) {
         m_device.destroyFramebuffer(framebuffer);
     }
 
-    for (auto& imageview : m_swapchain_image_views) {
+    for (auto& imageview : m_swapchain_struct.imageViews) {
         m_device.destroyImageView(imageview);
     }
 
     m_device.freeCommandBuffers(m_command_pool, (uint32_t)m_command_buffers.size(),
                                 m_command_buffers.data());
 
-    m_device.destroyPipeline(m_graphics_pipeline);
-    m_device.destroyPipelineLayout(m_pipeline_layout);
+    m_device.destroyPipelineCache(m_pipeline_cache);
+    m_device.destroyPipeline(m_graphics_pipelines.deferred);
+    m_device.destroyPipeline(m_graphics_pipelines.offscreen);
+    m_device.destroyPipelineLayout(m_pipeline_layouts.deferred);
+    m_device.destroyPipelineLayout(m_pipeline_layouts.offscreen);
     m_device.destroyRenderPass(m_render_pass);
 
-    m_device.destroySwapchainKHR(m_swapchain);
+    m_device.destroySwapchainKHR(m_swapchain_struct.swapchain);
 }
 
 vk::Extent2D
@@ -3268,33 +3652,36 @@ renderer::chooseSwapAlpha(const vk::SurfaceCapabilitiesKHR& capabilities)
 void
 renderer::initVulkan()
 {
+    // Base Vulkan initialization
     createInstance();
     setupDebugCallback();
     createSurface();
     pickPhysicalDevice();
     createLogicalDevice();
-    createSwapChain();
-    createDescriptorSetLayout();
-    createImageViews();
-    createRenderPass();
-    createGraphicsPipeline();
     createCommandPool();
+    createSwapChain();
+    // createImageViews(); // NOTE: This function is now part of createSwapChain
+    createCommandBuffers();
+    createSemaphores();
+    createFences();
     createDepthResources();
+    createRenderPass();
+    createPipelineCache();
     createFramebuffers();
+
     // Might want to move everything below this line to some other helper function
     loadAssets();
-    // TODO: Instead of looping through all meshed for each function,
-    // call the individual ones as part of loading each model.
-    createVertexBuffers();
-    createIndexBuffers();
-    createUniformBuffers();
+    generateQuads();
+    prepareOffscreenFramebuffer();
+    prepareUniformBuffers();
+    createDescriptorSetLayout();
+    createGraphicsPipeline();
     // Setup Descriptors
     createDescriptorPool();
     createDescriptorSet();
     // Build Command Buffers
-    createCommandBuffers();
-    createSemaphores();
-    createFences();
+    buildCommandBuffers();
+    buildDeferredCommandBuffer();
 }
 
 void

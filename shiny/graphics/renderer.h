@@ -25,20 +25,43 @@ struct uniformbufferobject
     glm::mat4 view;
     glm::mat4 proj;
     // glm::vec4 lightPos     = glm::vec4(5.0f, 5.0f, 5.0f, 1.0f);
-    glm::vec4 lightsPos[3] = { glm::vec4(7.0f, 7.0f, 7.0f, 1.0f),
+    /*glm::vec4 lightsPos[3] = { glm::vec4(7.0f, 7.0f, 7.0f, 1.0f),
                                glm::vec4(-9.0f, 5.0f, -9.0f, 1.0f),
-                               glm::vec4(1.0f, -5.0f, 2.0f, 1.0f) };
+                               glm::vec4(1.0f, -5.0f, 2.0f, 1.0f) };*/
+};
+
+// NOTE: These are borrowed from Sascha. I will need to rearrange to my own liking.
+
+struct Light
+{
+    glm::vec4 position;
+    glm::vec3 color;
+    float     radius;
+};
+
+struct UniformBuffers
+{
+    vk::Buffer               vsFullScreen;
+    vk::Buffer               vsOffScreen;
+    vk::Buffer               fsLights;
+    vk::DeviceMemory         vsFullScreen_mem;
+    vk::DeviceMemory         vsOffScreen_mem;
+    vk::DeviceMemory         fsLights_mem;
+    vk::DescriptorBufferInfo vsFullscreen_des;
+    vk::DescriptorBufferInfo vsOffscreen_des;
+    vk::DescriptorBufferInfo fsLights_des;
+    void*                    vsFullScreen_map;
+    void*                    vsOffScreen_map;
+    void*                    fsLights_map;
 };
 
 struct Vertex
 {
     glm::vec3 pos;
-    glm::vec4 color;
     glm::vec2 texcoord;
+    glm::vec3 color;
     glm::vec3 normal;
-
-    static vk::VertexInputBindingDescription                  getBindingDescription();
-    static std::array<vk::VertexInputAttributeDescription, 4> getAttributeDescription();
+    glm::vec3 tangent;
 };
 
 struct Mesh
@@ -56,7 +79,8 @@ struct Mesh
     vk::DeviceMemory         uniform_buffer_memory;
     vk::DescriptorSet        descriptor_set;
     vk::DescriptorBufferInfo buffer_info;
-    Texture2D                texture;
+    Texture2D                diffuse_tex;
+    Texture2D                normal_tex;
     glm::vec3                rotation;
     std::string              texture_filename;
     void*                    mapped;
@@ -70,7 +94,26 @@ struct Mesh
         device.destroyBuffer(uniform_buffer);
         device.freeMemory(uniform_buffer_memory);
         // delete image and texture views and samplers
-        texture.destroy(device);
+        diffuse_tex.destroy(device);
+        normal_tex.destroy(device);
+    }
+};
+
+// NOTE: WIP, this will eventually replace Mesh struct current usage
+// Mesh struct will solely contain vertex and index data
+// Models will encapsulate Textures and Meshes together.
+struct Model
+{
+    vk::Device* device;
+    Mesh        mesh;
+    Texture2D   diffuse_tex;
+    Texture2D   normal_tex;
+
+    void destroy(const vk::Device& device)
+    {
+        mesh.destroy(device);
+        diffuse_tex.destroy(device);
+        normal_tex.destroy(device);
     }
 };
 
@@ -89,6 +132,33 @@ struct FrameBuffer
     FrameBufferAttachment position, normal, albedo;
     FrameBufferAttachment depth;
     vk::RenderPass        renderPass;
+};
+
+struct Swapchain
+{
+    vk::SwapchainKHR swapchain;
+
+    vk::Format format;
+
+    std::vector<vk::Image>       images;
+    std::vector<vk::ImageView>   imageViews;
+    std::vector<vk::Framebuffer> frameBuffers;
+
+    uint32_t width, height;
+    uint32_t imageCount;
+};
+
+struct Pipelines
+{
+    vk::Pipeline deferred;
+    vk::Pipeline offscreen;
+    vk::Pipeline debug;
+};
+
+struct PipelineLayouts
+{
+    vk::PipelineLayout deferred;
+    vk::PipelineLayout offscreen;
 };
 
 
@@ -115,8 +185,10 @@ private:
     void pickPhysicalDevice();
     void createLogicalDevice();
     void createSwapChain();
+    void resizeSwapChain();
     void createImageViews();
     void createRenderPass();
+    void createPipelineCache();
     void createGraphicsPipeline();
     void createFramebuffers();
     void createCommandPool();
@@ -124,10 +196,11 @@ private:
     void createSemaphores();
     void createFences();
 
-    // TODO: These functions are deprecated. Delete in the next commit
-    void createVertexBuffers();
-    void createIndexBuffers();
-    void createUniformBuffers();
+    vk::CommandBuffer createCommandBuffer(vk::CommandBufferLevel level, bool begin = false);
+
+    // Build Functionality (Called after creation down the line)
+    void buildCommandBuffers();
+    void buildDeferredCommandBuffer();
 
     // These are the functions called for each mesh
     void createVertexBuffer(Mesh& mesh, const std::vector<Vertex> vertices);
@@ -136,9 +209,13 @@ private:
 
     // Prepare resources
     void prepareOffscreenFramebuffer();
+    void prepareUniformBuffers();
     void prepareInstanceData();
 
-    void updateUniformBuffer();
+    void updateUniformBuffer();  // let's hack this to update the camera matrices
+    void updateUniformBuffersScreen();
+    void updateUniformBufferDeferredMatrices();
+    void updateUniformBufferDeferredLights();
 
     void createDescriptorSetLayout();
     void createDescriptorPool();
@@ -161,6 +238,11 @@ private:
     Mesh loadFbx(std::string fbxpath);
 
     void loadTextures(std::vector<std::string> filenames);
+    void loadTextures(Mesh& mesh, std::string diffuseFilename, std::string normalFilename);
+
+    vk::PipelineShaderStageCreateInfo loadShader(const char*             entrypoint,
+                                                 std::string             fileName,
+                                                 vk::ShaderStageFlagBits stage);
 
     // helper functions
     std::pair<vk::Buffer, vk::DeviceMemory> createBuffer(vk::DeviceSize          size,
@@ -232,6 +314,9 @@ private:
         m_device.unmapMemory(memory);
     }
 
+    std::vector<vk::VertexInputBindingDescription>   getBindingDescription();
+    std::vector<vk::VertexInputAttributeDescription> getAttributeDescription();
+
     void recreateSwapChain();
     void cleanupSwapChain();
 
@@ -260,38 +345,44 @@ private:
 
     // swapchain things
     // TODO: Find a way to turn this back into a UniqueSwapchainKHR
-    vk::SwapchainKHR             m_swapchain;
-    std::vector<vk::Image>       m_swapchain_images;
-    std::vector<vk::ImageView>   m_swapchain_image_views;
-    vk::Format                   m_swapchain_image_format;
-    vk::Extent2D                 m_swapchain_extent;
-    std::vector<vk::Framebuffer> m_swapchain_framebuffers;
+    // TODO: shift these into m_swapchain_struct;
+    Swapchain m_swapchain_struct;
 
     vk::Buffer       m_uniform_buffer;
     vk::DeviceMemory m_uniform_buffer_memory;
 
-    vk::Image        m_depth_image;
-    vk::ImageView    m_depth_image_view;
-    vk::DeviceMemory m_depth_image_memory;
-
-    // TODO: These are hardcoded varibles that should exist in an asset cache.
+    // TODO: These are hardcoded variables that should exist in an asset cache.
     // Like m_shader_cache or something. Move these there.
-    vk::ShaderModule m_vertex_shader_module;
-    vk::ShaderModule m_fragment_shader_module;
+    vk::ShaderModule              m_vertex_shader_module;
+    vk::ShaderModule              m_fragment_shader_module;
+    std::vector<vk::ShaderModule> m_shader_modules;
 
     vk::DescriptorPool      m_descriptor_pool;
     vk::DescriptorSetLayout m_descriptor_set_layout;
-    vk::DescriptorSet       m_descriptor_set;
+    // vk::DescriptorSet       m_descriptor_set;
 
-    vk::RenderPass     m_render_pass;
-    vk::PipelineLayout m_pipeline_layout;  // used to define shader uniform value layouts
-    vk::Pipeline       m_graphics_pipeline;
+    vk::RenderPass m_render_pass;
+
+    // Pipeline variables
+    Pipelines         m_graphics_pipelines;
+    PipelineLayouts   m_pipeline_layouts;
+    vk::PipelineCache m_pipeline_cache;
+    // vk::PipelineLayout m_pipeline_layout;  // used to define shader uniform value layouts
+    // vk::Pipeline       m_graphics_pipeline;
 
     vk::CommandPool                m_command_pool;
-    std::vector<vk::CommandBuffer> m_command_buffers;
+    std::vector<vk::CommandBuffer> m_command_buffers;  // Draw Command Buffers
 
     std::vector<vk::Semaphore> m_image_available_semaphores;
     std::vector<vk::Semaphore> m_render_finished_semaphores;
+
+    // NOTE: Added these to isolate possible setup issues
+    vk::Semaphore          m_present_complete;
+    vk::Semaphore          m_render_complete;
+    vk::Semaphore          m_offscreen_semaphore;
+    vk::SubmitInfo         m_submit_info;
+    vk::PipelineStageFlags m_submit_pipeline_stages =
+      vk::PipelineStageFlagBits::eColorAttachmentOutput;
 
     static const uint32_t  max_frames_in_flight = 2;
     uint32_t               m_current_frame      = 0;
@@ -300,16 +391,35 @@ private:
     vk::Queue m_graphics_queue;
     vk::Queue m_presentation_queue;
 
+    // Validation Layer stuff
+
     // Temporary model loading stuff for testing. Eventually these will become a cache of meshes and
     // assets stored elsewhere.
     // Mesh m_mesh;
 
     // Asset Caches. TODO: use maps instead of a vector of meshes
     uniformbufferobject m_camera;
+    UniformBuffers      m_uniform_buffers;
     FrameBuffer         m_offscreen_framebuffer;
     Mesh                m_offscreen_quads;
+    vk::CommandBuffer   m_offscreen_commandbuffer;
     std::vector<Mesh>   m_meshes;
     vk::Sampler         m_color_sampler;
+
+    // NOTE: These are temporarily here until I do it my way.
+    struct
+    {
+        glm::mat4 projection;
+        glm::mat4 model;
+        glm::mat4 view;
+        glm::vec4 instancePos[3];
+    } uboVS, uboOffscreenVS;
+
+    struct
+    {
+        Light     lights[6];
+        glm::vec4 viewPos;
+    } uboFragmentLights;
 };
 
 /*
