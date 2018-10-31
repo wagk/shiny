@@ -1,5 +1,5 @@
-#include "Resource.h"
-#include "stdafx.h"
+//#include "Resource.h"
+//#include "stdafx.h"
 
 #include <iostream>
 #include <stdexcept>

@@ -178,6 +178,9 @@ private:
     void mainLoop();
     void cleanup();
 
+    void prepareFrame();
+    void submitFrame();
+
     void createInstance();
     void setupDebugCallback();
     void createSurface();
@@ -197,6 +200,7 @@ private:
     void createFences();
 
     vk::CommandBuffer createCommandBuffer(vk::CommandBufferLevel level, bool begin = false);
+    void flushCommandBuffer(vk::CommandBuffer commandBuffer, vk::Queue queue, bool free);
 
     // Build Functionality (Called after creation down the line)
     void buildCommandBuffers();
@@ -210,7 +214,6 @@ private:
     // Prepare resources
     void prepareOffscreenFramebuffer();
     void prepareUniformBuffers();
-    void prepareInstanceData();
 
     void updateUniformBuffer();  // let's hack this to update the camera matrices
     void updateUniformBuffersScreen();
@@ -386,7 +389,7 @@ private:
 
     static const uint32_t  max_frames_in_flight = 2;
     uint32_t               m_current_frame      = 0;
-    std::vector<vk::Fence> m_in_flight_fences;
+    std::vector<vk::Fence> m_wait_fences;
 
     vk::Queue m_graphics_queue;
     vk::Queue m_presentation_queue;

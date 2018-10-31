@@ -679,76 +679,44 @@ void
 renderer::drawFrame()
 {
     // Wait for the old fences. When the frames in flight goes above 2, this might not work anymore
-    m_device.waitForFences(m_in_flight_fences[m_current_frame], true,
-                           std::numeric_limits<uint64_t>::max());
-    m_device.resetFences(m_in_flight_fences[m_current_frame]);
+    // m_device.waitForFences(m_wait_fences[m_current_frame], true,
+    // std::numeric_limits<uint64_t>::max());
+    // m_device.resetFences(m_wait_fences[m_current_frame]);
 
     // Acquire image from swapchain.
-    auto next_image_results = m_device.acquireNextImageKHR(
-      m_swapchain_struct.swapchain, std::numeric_limits<uint64_t>::max(),
-      m_image_available_semaphores[m_current_frame], nullptr);
-    auto result = next_image_results.result;
-
-    if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR) {
-        recreateSwapChain();
-        return;
-    }
-
-    auto imageindex = next_image_results.value;
-    updateUniformBuffer();
+    prepareFrame();
 
     // Queue submission and synchronization is configured through parameters in the VkSubmitInfo
     // structure.
 
-    std::vector<vk::Semaphore> done_semaphores = { m_render_finished_semaphores[m_current_frame] };
-    std::vector<vk::Semaphore> wait_semaphores = { m_image_available_semaphores[m_current_frame] };
-    std::vector<vk::PipelineStageFlags> wait_stages = {
-        vk::PipelineStageFlagBits::eColorAttachmentOutput
-    };
+    // assert(wait_semaphores.size() == wait_stages.size() && "wait_semaphores and wait_stages must
+    // have same size!");
 
-    assert(wait_semaphores.size() == wait_stages.size()
-           && "wait_semaphores and wait_stages must have same size!");
+    // Wait for swap chain presentation to finish
+    m_submit_info.setPWaitSemaphores(&m_present_complete);
+    // Signal ready with offscreen semaphore
+    m_submit_info.setPSignalSemaphores(&m_offscreen_semaphore);
 
-    auto submitinfo = vk::SubmitInfo()
-                        .setWaitSemaphoreCount((uint32_t)wait_semaphores.size())
-                        // every semaphore here must match a vk::PipelineStageFlags, index for
-                        // index. The masks dictate which stage of the pipeline is mapped to which
-                        // semaphore the application must wait on
-                        .setPWaitSemaphores(wait_semaphores.data())
-                        // Therefore wait_stages must be exactly the same length as wait_semaphores
-                        .setPWaitDstStageMask(wait_stages.data())
-                        // The next two parameters specify which command buffers to actually submit
-                        // for execution. As mentioned earlier, we should submit the command buffer
-                        // that binds the swap chain image we just acquired as color attachment.
-                        .setCommandBufferCount(1)
-                        .setPCommandBuffers(&m_command_buffers[imageindex])
-                        // The signalSemaphoreCount and pSignalSemaphores parameters specify which
-                        // semaphores to signal once the command buffer(s) have finished execution.
-                        // In our case we're using the renderFinishedSemaphore for that purpose.
-                        .setSignalSemaphoreCount(1)
-                        .setPSignalSemaphores(done_semaphores.data());
+    // Submit work
+    // The next two parameters specify which command buffers to actually submit
+    // for execution. As mentioned earlier, we should submit the command buffer
+    // that binds the swap chain image we just acquired as color attachment.
+    m_submit_info.setCommandBufferCount(1).setPCommandBuffers(&m_offscreen_commandbuffer);
+    m_graphics_queue.submit(m_submit_info, nullptr);
 
-    m_graphics_queue.submit(submitinfo, m_in_flight_fences[m_current_frame]);
+    // Scene rendering...
 
-    // TODO: make this a smartptr or something
-    std::vector<vk::SwapchainKHR> swapchains = { m_swapchain_struct.swapchain };
+    // Wait for offscreen semaphore
+    m_submit_info.setPWaitSemaphores(&m_offscreen_semaphore);
+    // Signal ready with render complete semaphore
+    m_submit_info.setPSignalSemaphores(&m_render_complete);
 
-    auto presentinfo = vk::PresentInfoKHR()
-                         // The first two parameters specify which semaphores to wait on before
-                         // presentation can happen, just like VkSubmitInfo.
-                         .setWaitSemaphoreCount(1)
-                         .setPWaitSemaphores(done_semaphores.data())
-                         .setSwapchainCount((uint32_t)swapchains.size())
-                         .setPSwapchains(swapchains.data())
-                         .setPImageIndices(&imageindex);
+    // Submit work
+    m_submit_info.setPCommandBuffers(&m_command_buffers[m_current_frame]);
+    m_graphics_queue.submit(m_submit_info, nullptr);
 
-    if (auto result = m_presentation_queue.presentKHR(presentinfo);
-        result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR) {
-        recreateSwapChain();
-        return;
-    }
-
-    m_current_frame = (m_current_frame + 1) % max_frames_in_flight;
+    submitFrame();
+    // m_current_frame = (m_current_frame + 1) % max_frames_in_flight;
 }
 
 void
@@ -1025,13 +993,16 @@ renderer::createSwapChain()
         swapchainExtent.width  = m_win_width;
         swapchainExtent.height = m_win_height;
     } else {
-        swapchainExtent = support.capabilities.currentExtent;
-        m_win_width     = support.capabilities.currentExtent.width;
-        m_win_height    = support.capabilities.currentExtent.height;
+        swapchainExtent           = support.capabilities.currentExtent;
+        m_win_width               = support.capabilities.currentExtent.width;
+        m_win_height              = support.capabilities.currentExtent.height;
+        m_swapchain_struct.height = extent.height;
+        m_swapchain_struct.width  = extent.width;
     }
 
     uint32_t imagecount = support.capabilities.minImageCount + 1;
-    if (support.capabilities.maxImageCount > 0 && imagecount > support.capabilities.maxImageCount) {
+    if ((support.capabilities.maxImageCount > 0)
+        && (imagecount > support.capabilities.maxImageCount)) {
         imagecount = support.capabilities.maxImageCount;
     }
 
@@ -1099,6 +1070,8 @@ if (indices.graphicsFamily() != indices.presentFamily()) {
 
     // Get the swap chain images
     auto images = m_device.getSwapchainImagesKHR(m_swapchain_struct.swapchain);
+
+    m_swapchain_struct.imageCount = static_cast<uint32_t>(images.size());
     m_swapchain_struct.images.reserve(images.size());
     for (const auto& image : images) {
         m_swapchain_struct.images.emplace_back(image);
@@ -1128,8 +1101,6 @@ if (indices.graphicsFamily() != indices.presentFamily()) {
     }
 
     m_swapchain_struct.format = surfaceformat.format;
-    m_swapchain_struct.height = extent.height;
-    m_swapchain_struct.width  = extent.width;
 }
 
 void
@@ -1667,6 +1638,25 @@ renderer::createCommandBuffer(vk::CommandBufferLevel level, bool begin)
     return cmdBuffer;
 }
 
+void
+renderer::flushCommandBuffer(vk::CommandBuffer commandBuffer, vk::Queue queue, bool free)
+{
+    if (!commandBuffer) {
+        return;
+    }
+
+    commandBuffer.end();
+
+    auto submitInfo = vk::SubmitInfo().setCommandBufferCount(1).setPCommandBuffers(&commandBuffer);
+
+    queue.submit(1, &submitInfo, vk::Fence());
+    queue.waitIdle();
+
+    if (free) {
+        m_device.freeCommandBuffers(m_command_pool, 1, &commandBuffer);
+    }
+}
+
 /*
 Command buffers are automatically freed when their command pools are destroyed
 
@@ -1717,9 +1707,10 @@ renderer::createCommandBuffers()
         // We won't make use of the secondary command buffer functionality here, but you can imagine
         // that it's helpful to reuse common operations from primary command buffers.
         .setLevel(vk::CommandBufferLevel::ePrimary)
-        .setCommandBufferCount(static_cast<uint32_t>(m_swapchain_struct.frameBuffers.size()));
+        .setCommandBufferCount(static_cast<uint32_t>(m_command_buffers.size()));
 
     m_command_buffers = m_device.allocateCommandBuffers(allocinfo);
+    // std::cout << "m_command_buffers\n";
 }
 
 /*
@@ -1760,6 +1751,10 @@ renderer::createSemaphores()
     m_submit_info = vk::SubmitInfo()
                       .setPWaitDstStageMask(&m_submit_pipeline_stages)
                       .setWaitSemaphoreCount(1)
+                      // every semaphore here must match a vk::PipelineStageFlags, index for
+                      // index. The masks dictate which stage of the pipeline is mapped to which
+                      // semaphore the application must wait on
+                      // Therefore wait_stages must be exactly the same length as wait_semaphores
                       .setPWaitSemaphores(&m_present_complete)
                       .setSignalSemaphoreCount(1)
                       .setPSignalSemaphores(&m_render_complete);
@@ -1778,9 +1773,9 @@ renderer::createFences()
     // we create this fence already signalled, which it isn't by default
     auto fenceinfo = vk::FenceCreateInfo().setFlags(vk::FenceCreateFlagBits::eSignaled);
 
-    m_in_flight_fences.reserve(static_cast<uint32_t>(m_command_buffers.size()));
+    m_wait_fences.reserve(static_cast<uint32_t>(m_command_buffers.size()));
     for (uint32_t i = 0; i < m_command_buffers.size(); ++i) {
-        m_in_flight_fences.emplace_back(m_device.createFence(fenceinfo));
+        m_wait_fences.emplace_back(m_device.createFence(fenceinfo));
     }
 }
 
@@ -1937,12 +1932,14 @@ renderer::buildDeferredCommandBuffer()
     m_device.createSemaphore(&semaphoreCreateInfo, nullptr, &m_offscreen_semaphore);
 
     // Clear valus for all attachments written in the fragment shader
-    std::array<float, 4> color = { 0.f, 0.f, 0.f, 0.f };
+    std::array<float, 4> colorR = { 1.f, 0.f, 0.f, 0.f };
+    std::array<float, 4> colorG = { 0.f, 1.f, 0.f, 0.f };
+    std::array<float, 4> colorB = { 0.f, 0.f, 1.f, 0.f };
 
     std::array<vk::ClearValue, 4> clearValues = {};
-    clearValues[0].setColor(color);
-    clearValues[1].setColor(color);
-    clearValues[2].setColor(color);
+    clearValues[0].setColor(colorR);
+    clearValues[1].setColor(colorG);
+    clearValues[2].setColor(colorB);
     clearValues[3].setDepthStencil(vk::ClearDepthStencilValue(1.0f, 0));
 
     auto renderarea = vk::Rect2D(
@@ -1976,14 +1973,14 @@ renderer::buildDeferredCommandBuffer()
               command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
                                           m_graphics_pipelines.offscreen);
               for (auto mesh : m_meshes) {
-                  std::vector<vk::Buffer> vertexbuffers = { mesh.vertex_buffer };
-                  command_buffer.bindVertexBuffers(0, 1, vertexbuffers.data(), offsets);
-                  command_buffer.bindIndexBuffer(mesh.index_buffer, 0, vk::IndexType::eUint32);
+                  // std::vector<vk::Buffer> vertexbuffers = { mesh.vertex_buffer };
                   command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                                     m_pipeline_layouts.offscreen, 0, 1,
                                                     &mesh.descriptor_set, 0, NULL);
+                  command_buffer.bindVertexBuffers(0, 1, &mesh.vertex_buffer, offsets);
+                  command_buffer.bindIndexBuffer(mesh.index_buffer, 0, vk::IndexType::eUint32);
                   // Note: This is where I can set number of instanced meshes
-                  command_buffer.drawIndexed(mesh.num_indices, 3, 0, 0, 0);
+                  command_buffer.drawIndexed(mesh.num_indices, 1, 0, 0, 0);
               }
           });
     });
@@ -2432,13 +2429,13 @@ renderer::createDescriptorSet()
     m_uniform_buffers.vsFullscreen_des = vk::DescriptorBufferInfo()
                                            .setBuffer(m_offscreen_quads.uniform_buffer)
                                            .setOffset(0)
-                                           .setRange(sizeof(uniformbufferobject));
+                                           .setRange(sizeof(uboVS));
 
 
     m_uniform_buffers.fsLights_des = vk::DescriptorBufferInfo()
                                        .setBuffer(m_offscreen_quads.uniform_buffer)
                                        .setOffset(0)
-                                       .setRange(sizeof(uniformbufferobject));
+                                       .setRange(sizeof(uboFragmentLights));
 
     // Image descriptors for the offscreen color attachments
     auto texDescriptorPosition = vk::DescriptorImageInfo()
@@ -3452,6 +3449,16 @@ renderer::createAttachment(vk::Format             format,
       getMemoryType(memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal));
     m_device.allocateMemory(&memAlloc, nullptr, &attachment->memory);
     m_device.bindImageMemory(attachment->image, attachment->memory, 0);
+
+    // Create Image View
+    auto imageView = vk::ImageViewCreateInfo().setFormat(format).setImage(attachment->image);
+    imageView.subresourceRange.setAspectMask(aspectMask)
+      .setBaseMipLevel(0)
+      .setLevelCount(1)
+      .setBaseArrayLayer(0)
+      .setLayerCount(1);
+
+    m_device.createImageView(&imageView, nullptr, &attachment->image_view);
 }
 
 /* This function allows us to define our own list of prioritized formats, and will return the
@@ -3704,7 +3711,7 @@ renderer::cleanup()
         m_device.destroyFence(m_in_flight_fences[i], nullptr);
     }*/
 
-    for (auto& fence : m_in_flight_fences) {
+    for (auto& fence : m_wait_fences) {
         m_device.destroyFence(fence);
     }
 
@@ -3744,6 +3751,44 @@ renderer::cleanup()
 
     glfwDestroyWindow(m_window);
     glfwTerminate();
+}
+
+void
+renderer::prepareFrame()
+{
+    auto result = m_device.acquireNextImageKHR(m_swapchain_struct.swapchain,
+                                               std::numeric_limits<uint64_t>::max(),
+                                               m_present_complete, nullptr, &m_current_frame);
+
+    if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR) {
+        recreateSwapChain();
+    } else {
+        std::runtime_error("Invalid Image result!\n");
+    }
+}
+
+void
+renderer::submitFrame()
+{
+    auto presentInfo = vk::PresentInfoKHR()
+                         .setPNext(NULL)
+                         .setSwapchainCount(1)
+                         .setPSwapchains(&m_swapchain_struct.swapchain)
+                         .setPImageIndices(&m_current_frame);
+
+    // Check if a wait semaphore has been specified to wait for before presenting the image
+    if (m_render_complete) {
+        presentInfo.setPWaitSemaphores(&m_render_complete).setWaitSemaphoreCount(1);
+    }
+
+    auto result = m_presentation_queue.presentKHR(&presentInfo);
+    if (!((result == vk::Result::eSuccess || (result == vk::Result::eSuboptimalKHR)))) {
+        if (result == vk::Result::eErrorOutOfDateKHR) {
+            // window resize();
+            return;
+        }
+    }
+    m_presentation_queue.waitIdle();
 }
 
 }  // namespace shiny::graphics
