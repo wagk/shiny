@@ -122,7 +122,8 @@ const std::array<float, 4> backgroundColor = { 0.033f, 0.111f, 0.124f, 1.0f };
 //
 // const shiny::graphics::Mesh triangle_mesh(triangle_vertices, triangle_indices);
 
-const std::vector<std::string> all_model_filenames = { "models/imrodnew.fbx" };
+// const std::vector<std::string> all_model_filenames = { "models/imrodnew.fbx" };
+const std::vector<std::string> all_model_filenames = { "models/singleCubeSelection.fbx" };
 //"models/singleCubeSelection.fbx" };
 
 const std::vector<std::string> all_texture_filenames = { "textures/Imrod_Diffuse.png",
@@ -2567,7 +2568,12 @@ m_device.updateDescriptorSets(static_cast<uint32_t>(ddescriptorWrites.size()),
         mesh.buffer_info = vk::DescriptorBufferInfo()
                              .setBuffer(mesh.uniform_buffer)
                              .setOffset(0)
-                             .setRange(sizeof(uniformbufferobject));
+                             .setRange(sizeof(uboOffscreenVS));
+
+        m_uniform_buffers.vsOffscreen_des = vk::DescriptorBufferInfo()
+                                              .setBuffer(m_uniform_buffers.vsOffScreen)
+                                              .setOffset(0)
+                                              .setRange(VK_WHOLE_SIZE);
 
         mesh.diffuse_tex.descriptor = vk::DescriptorImageInfo()
                                         .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
@@ -2586,7 +2592,7 @@ m_device.updateDescriptorSets(static_cast<uint32_t>(ddescriptorWrites.size()),
           .setDstBinding(0)
           .setDescriptorType(vk::DescriptorType::eUniformBuffer)
           .setDescriptorCount(1)
-          .setPBufferInfo(&mesh.buffer_info);
+          .setPBufferInfo(&m_uniform_buffers.vsOffscreen_des);
         // Binding 1: Color map
         descriptorWrites[1]
           .setDstSet(mesh.descriptor_set)
@@ -3003,7 +3009,8 @@ renderer::loadFbx(std::string fbxpath)
 
         auto vertices = pMesh->mVertices;
         // auto colors   = pMesh->mColors;
-        auto normals = pMesh->mNormals;
+        auto normals  = pMesh->mNormals;
+        auto tangents = pMesh->mTangents;
 
         // Get material properties
         aiColor3D pColor(0.f, 0.f, 0.f);
@@ -3040,6 +3047,12 @@ renderer::loadFbx(std::string fbxpath)
                 // We flip the Y coord because Vulkan origin is in the Top-Left, while Maya is
                 // Bottom-Left
                 vertex.texcoord = glm::vec2(uvs->x, -uvs->y);
+            }
+
+            if (tangents != nullptr) {
+                vertex.tangent = glm::vec3(tangents[ii].x, tangents[ii].y, tangents[ii].z);
+            } else {
+                vertex.tangent = glm::vec3(0.0f);
             }
 
             // Save the vertex to Mesh
