@@ -134,15 +134,21 @@ struct FrameBuffer
     vk::RenderPass        renderPass;
 };
 
+struct SwapchainBuffer
+{
+    vk::Image     image;
+    vk::ImageView view;
+};
+
 struct Swapchain
 {
     vk::SwapchainKHR swapchain;
 
     vk::Format format;
 
-    std::vector<vk::Image>       images;
-    std::vector<vk::ImageView>   imageViews;
-    std::vector<vk::Framebuffer> frameBuffers;
+    std::vector<vk::Image> images;
+    // std::vector<vk::ImageView>   imageViews;
+    std::vector<SwapchainBuffer> buffers;
 
     uint32_t width, height;
     uint32_t imageCount;
@@ -350,6 +356,8 @@ private:
     // TODO: Find a way to turn this back into a UniqueSwapchainKHR
     // TODO: shift these into m_swapchain_struct;
     Swapchain m_swapchain_struct;
+
+    std::vector<vk::Framebuffer> m_framebuffers;
 
     vk::Buffer       m_uniform_buffer;
     vk::DeviceMemory m_uniform_buffer_memory;

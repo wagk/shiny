@@ -815,7 +815,8 @@ renderer::setupDebugCallback()
 
     auto createinfo = vk::DebugReportCallbackCreateInfoEXT()
                         .setPfnCallback(debugCallback)
-                        .setFlags(DebugFlags::eError | DebugFlags::eWarning);
+                        .setFlags(DebugFlags::eError | DebugFlags::eWarning | DebugFlags::eDebug
+                                  | DebugFlags::eInformation | DebugFlags::ePerformanceWarning);
 
     if (CreateDebugReportCallbackEXT(m_instance, createinfo, m_callback) != vk::Result::eSuccess) {
         throw std::runtime_error("Failed to set up debug callback!");
@@ -983,23 +984,28 @@ renderer::createSwapChain()
 
     SwapChainSupportDetails support = querySwapChainSupport(m_physical_device, m_surface);
 
-    vk::SurfaceFormatKHR          surfaceformat  = chooseSwapSurfaceFormat(support.formats);
-    vk::PresentModeKHR            presentmode    = chooseSwapPresentMode(support.presentModes);
-    vk::Extent2D                  extent         = chooseSwapExtent(support.capabilities);
-    vk::CompositeAlphaFlagBitsKHR compositeAlpha = chooseSwapAlpha(support.capabilities);
+    vk::SurfaceFormatKHR surfaceformat = chooseSwapSurfaceFormat(support.formats);
+    vk::PresentModeKHR   presentmode   = chooseSwapPresentMode(support.presentModes);
 
+    uint32_t presentModeCount;
+    m_physical_device.getSurfacePresentModesKHR(m_surface, &presentModeCount, NULL);
+    std::vector<vk::PresentModeKHR> presentModes(presentModeCount);
+    m_physical_device.getSurfacePresentModesKHR(m_surface, &presentModeCount, presentModes.data());
+
+    // vk::Extent2D                  extent         = chooseSwapExtent(support.capabilities);
+
+    // Setup extent info
     vk::Extent2D swapchainExtent = {};
     if (support.capabilities.currentExtent.width == (uint32_t)-1) {
         swapchainExtent.width  = m_win_width;
         swapchainExtent.height = m_win_height;
     } else {
-        swapchainExtent           = support.capabilities.currentExtent;
-        m_win_width               = support.capabilities.currentExtent.width;
-        m_win_height              = support.capabilities.currentExtent.height;
-        m_swapchain_struct.height = extent.height;
-        m_swapchain_struct.width  = extent.width;
+        swapchainExtent = support.capabilities.currentExtent;
+        m_win_width     = support.capabilities.currentExtent.width;
+        m_win_height    = support.capabilities.currentExtent.height;
     }
 
+    // Determine the number of images
     uint32_t imagecount = support.capabilities.minImageCount + 1;
     if ((support.capabilities.maxImageCount > 0)
         && (imagecount > support.capabilities.maxImageCount)) {
@@ -1015,6 +1021,9 @@ renderer::createSwapChain()
         preTransform = support.capabilities.currentTransform;
     }
 
+    // Find a supported composite alpha format
+    vk::CompositeAlphaFlagBitsKHR compositeAlpha = chooseSwapAlpha(support.capabilities);
+
     // Now we tie it all together in a CreateInfo
     auto createinfo = vk::SwapchainCreateInfoKHR()
                         .setPNext(NULL)
@@ -1022,7 +1031,7 @@ renderer::createSwapChain()
                         .setMinImageCount(imagecount)
                         .setImageFormat(surfaceformat.format)
                         .setImageColorSpace(surfaceformat.colorSpace)
-                        .setImageExtent(extent)
+                        .setImageExtent(swapchainExtent)
                         .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment)
                         .setPreTransform(preTransform)
                         .setImageArrayLayers(1)
@@ -1063,7 +1072,7 @@ if (indices.graphicsFamily() != indices.presentFamily()) {
     // This also cleans up all the presentable images
     if (oldSwapchain) {
         for (uint32_t i = 0; i < imagecount; ++i) {
-            m_device.destroyImageView(m_swapchain_struct.imageViews[i]);
+            m_device.destroyImageView(m_swapchain_struct.buffers[i].view);
         }
         m_device.destroySwapchainKHR(oldSwapchain);
     }
@@ -1078,7 +1087,7 @@ if (indices.graphicsFamily() != indices.presentFamily()) {
     }
 
     // Get the swap chain buffers containing the image and imageview
-    m_swapchain_struct.frameBuffers.reserve(images.size());
+    m_swapchain_struct.buffers.resize(images.size());
     for (uint32_t i = 0; i < images.size(); ++i) {
         auto ssr = vk::ImageSubresourceRange()
                      .setAspectMask(vk::ImageAspectFlagBits::eColor)
@@ -1096,11 +1105,15 @@ if (indices.graphicsFamily() != indices.presentFamily()) {
             .setSubresourceRange(ssr)
             .setViewType(vk::ImageViewType::e2D)
             .setFlags(vk::ImageViewCreateFlagBits(0))
-            .setImage(m_swapchain_struct.images[i]);
-        m_swapchain_struct.imageViews.emplace_back(m_device.createImageView(colorAttachmentView));
+            .setImage(images[i]);
+
+        m_swapchain_struct.buffers[i].image = images[i];
+        m_swapchain_struct.buffers[i].view  = m_device.createImageView(colorAttachmentView);
     }
 
     m_swapchain_struct.format = surfaceformat.format;
+    m_swapchain_struct.height = m_win_height;
+    m_swapchain_struct.width  = m_win_width;
 }
 
 void
@@ -1137,11 +1150,11 @@ https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#re
 void
 renderer::createImageViews()
 {
-    m_swapchain_struct.imageViews.reserve(m_swapchain_struct.images.size());
+    // m_swapchain_struct.imageViews.reserve(m_swapchain_struct.images.size());
 
     for (const vk::Image& image : m_swapchain_struct.images) {
-        m_swapchain_struct.imageViews.emplace_back(
-          createImageView(image, m_swapchain_struct.format, vk::ImageAspectFlagBits::eColor));
+        // m_swapchain_struct.buffers.views.emplace_back(
+        // createImageView(image, m_swapchain_struct.format, vk::ImageAspectFlagBits::eColor));
     }
 }
 
@@ -1562,33 +1575,34 @@ https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#Vk
 void
 renderer::createFramebuffers()
 {
-    m_swapchain_struct.frameBuffers.reserve(m_swapchain_struct.imageViews.size());
+    vk::ImageView attachments[2];
+    attachments[1] = m_offscreen_framebuffer.depth.image_view;
 
-    for (auto const& view : m_swapchain_struct.imageViews) {
-        std::array<vk::ImageView, 2> attachments = { view,
-                                                     m_offscreen_framebuffer.depth.image_view };
+    auto framebufferinfo = vk::FramebufferCreateInfo()
+                             .setPNext(NULL)
+                             .setRenderPass(m_render_pass)
+                             // The attachmentCount and pAttachments parameters specify the
+                             // VkImageView objects that should be bound to the respective
+                             // attachment descriptions in the render pass pAttachment array.
+                             .setAttachmentCount(2)
+                             //.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+                             .setPAttachments(attachments)
+                             .setWidth(m_win_width)
+                             .setHeight(m_win_height)
+                             // layers refers to the number of layers in image arrays. Our swap
+                             // chain images are single images, so the number of layers is 1.
+                             .setLayers(1);
 
-        auto framebufferinfo = vk::FramebufferCreateInfo()
-                                 .setPNext(NULL)
-                                 .setRenderPass(m_render_pass)
-                                 // The attachmentCount and pAttachments parameters specify the
-                                 // VkImageView objects that should be bound to the respective
-                                 // attachment descriptions in the render pass pAttachment array.
-                                 .setAttachmentCount(2)
-                                 //.setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-                                 .setPAttachments(attachments.data())
-                                 .setWidth(m_win_width)
-                                 .setHeight(m_win_height)
-                                 // layers refers to the number of layers in image arrays. Our swap
-                                 // chain images are single images, so the number of layers is 1.
-                                 .setLayers(1);
-
+    m_framebuffers.resize(m_swapchain_struct.imageCount);
+    for (uint32_t i = 0; i < m_framebuffers.size(); ++i) {
+        attachments[0]   = m_swapchain_struct.buffers[i].view;
         auto framebuffer = m_device.createFramebuffer(framebufferinfo);
         if (!framebuffer) {
             throw std::runtime_error("failed to create framebuffer!");
         }
-        m_swapchain_struct.frameBuffers.emplace_back(framebuffer);
+        m_framebuffers[i] = framebuffer;
     }
+    std::cout << "Swapchain Framebuffers created!\n";
 }
 
 /*
@@ -1782,6 +1796,49 @@ renderer::createFences()
 void
 renderer::buildCommandBuffers()
 {
+    // The flags parameter specifies how we're going to use the command buffer. The
+    // following values are available:
+    //  - VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: The command buffer will be rerecorded
+    //    right after executing it once.
+    //  - VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT:
+    //    This is a secondary command buffer that will be entirely within a single render
+    //    pass.
+    //  - VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT: The command buffer can be
+    //    resubmitted while it is also already pending execution.
+    // We have used the last flag because we may already be scheduling the drawing commands
+    // for the next frame while the last frame is not finished yet.
+    auto begininfo = vk::CommandBufferBeginInfo();
+    //.setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse);
+
+    /*The range of depths in the depth buffer is 0.0 to 1.0 in Vulkan, where 1.0 lies at the
+     * far view plane and 0.0 at the near view plane. The initial value at each point in the
+     * depth buffer should be the furthest possible depth, which is 1.0.*/
+    std::array<vk::ClearValue, 2> clearValues = {};
+    clearValues[0].setColor(vk::ClearColorValue(backgroundColor));
+    clearValues[1].setDepthStencil(vk::ClearDepthStencilValue(1.0f, 0));
+
+    // Render Area
+    auto renderarea =
+      vk::Rect2D({ 0, 0 }, vk::Extent2D(m_swapchain_struct.width, m_swapchain_struct.height));
+
+    // Create Render pass begin info
+    auto renderpassinfo =
+      vk::RenderPassBeginInfo()
+        // The first parameters are the render pass itself and the attachments to bind. We
+        // created a framebuffer for each swap chain image that specifies it as color
+        // attachment.
+        .setRenderPass(m_render_pass)
+        //.setFramebuffer(framebuffer)
+        // The render area defines where shader loads and stores will take place. The pixels
+        // outside this region will have undefined values. It should match the size of the
+        // attachments for best performance.
+        .setRenderArea(renderarea)
+        // The last two parameters define the clear values to use for
+        // VK_ATTACHMENT_LOAD_OP_CLEAR, which we used as load operation for the color
+        // attachment. I've defined the clear color to simply be black with 100% opacity.
+        .setClearValueCount(static_cast<uint32_t>(clearValues.size()))
+        .setPClearValues(clearValues.data());
+
     // We begin recording a command buffer by calling vkBeginCommandBuffer with a small
     // VkCommandBufferBeginInfo structure as argument that specifies some details about the usage of
     // this specific command buffer.whereupon which we can use vkCmd*-named calls to record draw
@@ -1789,53 +1846,9 @@ renderer::buildCommandBuffers()
 
     for (size_t i = 0; i < m_command_buffers.size(); ++i) {
         auto const& command_buffer = m_command_buffers[i];
-
-        // The flags parameter specifies how we're going to use the command buffer. The
-        // following values are available:
-        //  - VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: The command buffer will be rerecorded
-        //    right after executing it once.
-        //  - VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT:
-        //    This is a secondary command buffer that will be entirely within a single render
-        //    pass.
-        //  - VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT: The command buffer can be
-        //    resubmitted while it is also already pending execution.
-        // We have used the last flag because we may already be scheduling the drawing commands
-        // for the next frame while the last frame is not finished yet.
-        auto begininfo = vk::CommandBufferBeginInfo();
-        //.setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse);
-
-        /*The range of depths in the depth buffer is 0.0 to 1.0 in Vulkan, where 1.0 lies at the
-         * far view plane and 0.0 at the near view plane. The initial value at each point in the
-         * depth buffer should be the furthest possible depth, which is 1.0.*/
-        std::array<vk::ClearValue, 2> clearValues = {};
-        clearValues[0].setColor(vk::ClearColorValue(backgroundColor));
-        clearValues[1].setDepthStencil(vk::ClearDepthStencilValue(1.0f, 0));
+        renderpassinfo.setFramebuffer(m_framebuffers[i]);
 
         recordCommandBuffer(command_buffer, begininfo, [=]() {
-            // Set target frame buffer
-            auto const& framebuffer = m_swapchain_struct.frameBuffers[i];
-            // Render Area
-            auto renderarea = vk::Rect2D(
-              { 0, 0 }, vk::Extent2D(m_swapchain_struct.width, m_swapchain_struct.height));
-
-            // Create Render pass begin info
-            auto renderpassinfo =
-              vk::RenderPassBeginInfo()
-                // The first parameters are the render pass itself and the attachments to bind. We
-                // created a framebuffer for each swap chain image that specifies it as color
-                // attachment.
-                .setRenderPass(m_render_pass)
-                .setFramebuffer(framebuffer)
-                // The render area defines where shader loads and stores will take place. The pixels
-                // outside this region will have undefined values. It should match the size of the
-                // attachments for best performance.
-                .setRenderArea(renderarea)
-                // The last two parameters define the clear values to use for
-                // VK_ATTACHMENT_LOAD_OP_CLEAR, which we used as load operation for the color
-                // attachment. I've defined the clear color to simply be black with 100% opacity.
-                .setClearValueCount(static_cast<uint32_t>(clearValues.size()))
-                .setPClearValues(clearValues.data());
-
             // The render pass can now begin. All of the functions that record commands can be
             // recognized by their vkCmd prefix. They all return void, so there will be no error
             // handling until we've finished recording.
@@ -1972,16 +1985,27 @@ renderer::buildDeferredCommandBuffer()
               vk::DeviceSize offsets[1] = { 0 };
               command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
                                           m_graphics_pipelines.offscreen);
+
+              // For all meshes
+              /*
               for (auto mesh : m_meshes) {
-                  // std::vector<vk::Buffer> vertexbuffers = { mesh.vertex_buffer };
-                  command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                                    m_pipeline_layouts.offscreen, 0, 1,
-                                                    &mesh.descriptor_set, 0, NULL);
-                  command_buffer.bindVertexBuffers(0, 1, &mesh.vertex_buffer, offsets);
-                  command_buffer.bindIndexBuffer(mesh.index_buffer, 0, vk::IndexType::eUint32);
-                  // Note: This is where I can set number of instanced meshes
-                  command_buffer.drawIndexed(mesh.num_indices, 1, 0, 0, 0);
-              }
+      // std::vector<vk::Buffer> vertexbuffers = { mesh.vertex_buffer };
+      command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                        m_pipeline_layouts.offscreen, 0, 1,
+                                        &mesh.descriptor_set, 0, NULL);
+      command_buffer.bindVertexBuffers(0, 1, &mesh.vertex_buffer, offsets);
+      command_buffer.bindIndexBuffer(mesh.index_buffer, 0, vk::IndexType::eUint32);
+      // Note: This is where I can set number of instanced meshes
+      command_buffer.drawIndexed(mesh.num_indices, 3, 0, 0, 0);
+  }*/
+
+              command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                                m_pipeline_layouts.offscreen, 0, 1,
+                                                &m_meshes[0].descriptor_set, 0, NULL);
+              command_buffer.bindVertexBuffers(0, 1, &m_meshes[0].vertex_buffer, offsets);
+              command_buffer.bindIndexBuffer(m_meshes[0].index_buffer, 0, vk::IndexType::eUint32);
+              // Note: This is where I can set number of instanced meshes
+              command_buffer.drawIndexed(m_meshes[0].num_indices, 3, 0, 0, 0);
           });
     });
 
@@ -2238,6 +2262,7 @@ renderer::prepareOffscreenFramebuffer()
     if (!(m_color_sampler = m_device.createSampler(sampler))) {
         std::runtime_error("Error creating Offscreen Render Pass!\n");
     }
+    std::cout << "Offscreen Framebuffers created!\n";
 }
 
 void
@@ -2274,7 +2299,7 @@ renderer::prepareUniformBuffers()
     uboOffscreenVS.instancePos[2] = glm::vec4(4.0f, 0.0, -4.0f, 0.0f);
 
     // Update
-    updateUniformBuffer();
+    updateUniformBuffer();  // update the camera
     updateUniformBuffersScreen();
     updateUniformBufferDeferredMatrices();
     updateUniformBufferDeferredLights();
@@ -2383,12 +2408,10 @@ renderer::createDescriptorPool()
 {
     std::array<vk::DescriptorPoolSize, 2> descriptorPoolSizes = {};
     // Uniform buffers : 3 for scene UBOs and 1 per object (scene and local matrices)
-    descriptorPoolSizes[0].setType(vk::DescriptorType::eUniformBuffer).setDescriptorCount(20);
+    descriptorPoolSizes[0].setType(vk::DescriptorType::eUniformBuffer).setDescriptorCount(6);
     //.setDescriptorCount(5 + static_cast<uint32_t>(m_meshes.size()));
     // Combined image samples : 4 for the render targets, 1 per mesh texture
-    descriptorPoolSizes[1]
-      .setType(vk::DescriptorType::eCombinedImageSampler)
-      .setDescriptorCount(20);
+    descriptorPoolSizes[1].setType(vk::DescriptorType::eCombinedImageSampler).setDescriptorCount(7);
     //.setDescriptorCount(4 + static_cast<uint32_t>(m_meshes.size()));
 
     auto poolinfo = vk::DescriptorPoolCreateInfo()
@@ -2780,8 +2803,8 @@ renderer::updateUniformBuffer()
       std::chrono::duration<float, std::chrono::seconds::period>(current_t - start_t).count();
 
     // uniformbufferobject ubo;
-    m_camera.model =
-      glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f, 0.f));
+    m_camera.model = glm::mat4(1.0f);
+    // glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f, 0.f));
     m_camera.view =
       glm::lookAt(glm::vec3(0.f, 2.f, 7.5f), glm::vec3(0.f, 2.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
     m_camera.proj =
@@ -2801,19 +2824,20 @@ renderer::updateUniformBuffer()
 
     // Update the meshes
     // Imrod translation
-    m_meshes[0].matrices.model = glm::translate(m_camera.model, glm::vec3(-2.0f, 0.0f, 0.0f));
+    // m_meshes[0].matrices.model = glm::translate(m_camera.model, glm::vec3(-2.0f, 0.0f, 0.0f));
+
     // Cube translation
     /*m_meshes[1].matrices.model = glm::translate(m_camera.model, glm::vec3(1.5f, 0.5f, 1.0f));
     m_meshes[1].matrices.model = glm::rotate(m_meshes[1].matrices.model, time * glm::radians(60.f),
                                              glm::vec3(1.0f, 1.0f, 1.0f));*/
-
-    for (auto& mesh : m_meshes) {
-        mesh.matrices.proj = m_camera.proj;
-        mesh.matrices.view = m_camera.view;
-        withMappedMemory(
-          mesh.uniform_buffer_memory, 0, sizeof(uniformbufferobject),
-          [=](void* data) { std::memcpy(data, &mesh.matrices, sizeof(uniformbufferobject)); });
-    }
+    /*
+for (auto& mesh : m_meshes) {
+    mesh.matrices.proj = m_camera.proj;
+    mesh.matrices.view = m_camera.view;
+    withMappedMemory(
+      mesh.uniform_buffer_memory, 0, sizeof(uniformbufferobject),
+      [=](void* data) { std::memcpy(data, &mesh.matrices, sizeof(uniformbufferobject)); });
+}*/
 }
 
 void
@@ -2832,8 +2856,8 @@ renderer::updateUniformBufferDeferredMatrices()
 
     uboOffscreenVS.projection = m_camera.proj;
     uboOffscreenVS.view       = m_camera.view;
-    // uboOffscreenVS.model      = m_camera.model;
-    uboOffscreenVS.model = glm::mat4(1.0f);
+    uboOffscreenVS.model      = m_camera.model;
+    // uboOffscreenVS.model = glm::mat4(1.0f);
 
     withMappedMemory(m_uniform_buffers.vsOffScreen_mem, 0, sizeof(uboOffscreenVS), [=](void* data) {
         std::memcpy(data, &uboOffscreenVS, sizeof(uboOffscreenVS));
@@ -3042,6 +3066,7 @@ renderer::loadFbx(std::string fbxpath)
     createVertexBuffer(newMesh, newVertices);
     createIndexBuffer(newMesh, newIndices);
     createUniformBuffer(newMesh, sizeof(uniformbufferobject));
+    newMesh.device = &m_device;
 
     return newMesh;
 }
@@ -3070,11 +3095,13 @@ void
 renderer::loadTextures(Mesh& mesh, std::string diffuseFilename, std::string normalFilename)
 {
     // First create the diffuse Texture2D
+    mesh.diffuse_tex.device = mesh.device;
     createTextureImage(diffuseFilename, mesh.diffuse_tex);
     createTextureImageView(mesh.diffuse_tex);
     createTextureSampler(mesh.diffuse_tex);
 
     // Second, create the Normal Texture2D
+    mesh.normal_tex.device = mesh.device;
     createTextureImage(normalFilename, mesh.normal_tex);
     createTextureImageView(mesh.normal_tex);
     createTextureSampler(mesh.normal_tex);
@@ -3594,12 +3621,9 @@ renderer::cleanupSwapChain()
     m_device.destroyImage(m_offscreen_framebuffer.depth.image);
     m_device.freeMemory(m_offscreen_framebuffer.depth.memory);
 
-    for (auto& framebuffer : m_swapchain_struct.frameBuffers) {
-        m_device.destroyFramebuffer(framebuffer);
-    }
-
-    for (auto& imageview : m_swapchain_struct.imageViews) {
-        m_device.destroyImageView(imageview);
+    for (auto& buffer : m_swapchain_struct.buffers) {
+        m_device.destroyImage(buffer.image);
+        m_device.destroyImageView(buffer.view);
     }
 
     m_device.freeCommandBuffers(m_command_pool, (uint32_t)m_command_buffers.size(),
@@ -3697,6 +3721,10 @@ renderer::mainLoop()
     while (!glfwWindowShouldClose(m_window)) {
         glfwPollEvents();
         drawFrame();
+        updateUniformBuffer();
+        updateUniformBuffersScreen();
+        updateUniformBufferDeferredMatrices();
+        updateUniformBufferDeferredLights();
     }
 
     m_device.waitIdle();
