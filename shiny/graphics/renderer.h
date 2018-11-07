@@ -359,8 +359,8 @@ private:
 
     std::vector<vk::Framebuffer> m_framebuffers;
 
-    vk::Buffer       m_uniform_buffer;
-    vk::DeviceMemory m_uniform_buffer_memory;
+    // vk::Buffer       m_uniform_buffer;
+    // vk::DeviceMemory m_uniform_buffer_memory;
 
     // TODO: These are hardcoded variables that should exist in an asset cache.
     // Like m_shader_cache or something. Move these there.

@@ -1370,7 +1370,7 @@ renderer::createGraphicsPipeline()
         //    VK_POLYGON_MODE_LINE: polygon edges are drawn as lines
         //    VK_POLYGON_MODE_POINT: polygon vertices are drawn as points
         // Using any mode other than fill requires enabling a GPU feature.
-        .setPolygonMode(vk::PolygonMode::eFill)
+        .setPolygonMode(vk::PolygonMode::eLine)
         // The lineWidth member is straightforward, it describes the thickness of lines in terms of
         // number of fragments. The maximum line width that is supported depends on the hardware and
         // any line thicker than 1.0f requires you to enable the wideLines GPU feature.
@@ -2119,6 +2119,8 @@ renderer::createUniformBuffer(Mesh& mesh, const vk::DeviceSize buffersize)
 void
 renderer::prepareOffscreenFramebuffer()
 {
+    // m_offscreen_framebuffer.width  = 2048;
+    // m_offscreen_framebuffer.height = 2048;
     m_offscreen_framebuffer.width  = m_win_width;
     m_offscreen_framebuffer.height = m_win_height;
 
@@ -2157,12 +2159,11 @@ renderer::prepareOffscreenFramebuffer()
         attachmentDescriptions[i].storeOp        = vk::AttachmentStoreOp::eDontCare;
         attachmentDescriptions[i].stencilLoadOp  = vk::AttachmentLoadOp::eDontCare;
         attachmentDescriptions[i].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        attachmentDescriptions[i].initialLayout  = vk::ImageLayout::eUndefined;
         if (i == 3) {
-            attachmentDescriptions[i].initialLayout = vk::ImageLayout::eUndefined;
             attachmentDescriptions[i].finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
         } else {
-            attachmentDescriptions[i].initialLayout = vk::ImageLayout::eUndefined;
-            attachmentDescriptions[i].finalLayout   = vk::ImageLayout::eShaderReadOnlyOptimal;
+            attachmentDescriptions[i].finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         }
     }
     // Formats of each attachment
@@ -2438,6 +2439,7 @@ renderer::createDescriptorSet()
 {
     std::vector<vk::DescriptorSetLayout> layouts = { m_descriptor_set_layout };
 
+    // Textured Quad descriptor set
     auto allocinfo = vk::DescriptorSetAllocateInfo()
                        .setDescriptorPool(m_descriptor_pool)
                        .setDescriptorSetCount((uint32_t)layouts.size())
@@ -2809,8 +2811,9 @@ renderer::updateUniformBuffer()
       std::chrono::duration<float, std::chrono::seconds::period>(current_t - start_t).count();
 
     // uniformbufferobject ubo;
-    m_camera.model = glm::mat4(1.0f);
-    // glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f, 0.f));
+    // m_camera.model = glm::mat4(1.0f);
+    m_camera.model =
+      glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f, 0.f));
     m_camera.view =
       glm::lookAt(glm::vec3(0.f, 2.f, 7.5f), glm::vec3(0.f, 2.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
     m_camera.proj =
@@ -2836,14 +2839,14 @@ renderer::updateUniformBuffer()
     /*m_meshes[1].matrices.model = glm::translate(m_camera.model, glm::vec3(1.5f, 0.5f, 1.0f));
     m_meshes[1].matrices.model = glm::rotate(m_meshes[1].matrices.model, time * glm::radians(60.f),
                                              glm::vec3(1.0f, 1.0f, 1.0f));*/
-    /*
-for (auto& mesh : m_meshes) {
-    mesh.matrices.proj = m_camera.proj;
-    mesh.matrices.view = m_camera.view;
-    withMappedMemory(
-      mesh.uniform_buffer_memory, 0, sizeof(uniformbufferobject),
-      [=](void* data) { std::memcpy(data, &mesh.matrices, sizeof(uniformbufferobject)); });
-}*/
+
+    for (auto& mesh : m_meshes) {
+        mesh.matrices.proj = m_camera.proj;
+        mesh.matrices.view = m_camera.view;
+        withMappedMemory(
+          mesh.uniform_buffer_memory, 0, sizeof(uniformbufferobject),
+          [=](void* data) { std::memcpy(data, &mesh.matrices, sizeof(uniformbufferobject)); });
+    }
 }
 
 void
