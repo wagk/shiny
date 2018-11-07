@@ -1377,7 +1377,7 @@ renderer::createGraphicsPipeline()
         .setLineWidth(1.f)
         // The cullMode variable determines the type of face culling to use. You can disable
         // culling, cull the front faces, cull the back faces or both.
-        .setCullMode(vk::CullModeFlagBits::eBack)
+        .setCullMode(vk::CullModeFlagBits::eNone)
         // The frontFace variable specifies the vertex order for faces to be considered front-facing
         // and can be clockwise or counterclockwise.
         .setFrontFace(vk::FrontFace::eClockwise)
@@ -1891,7 +1891,7 @@ renderer::buildCommandBuffers()
                                               m_graphics_pipelines.deferred);
                   command_buffer.bindIndexBuffer(m_offscreen_quads.index_buffer, 0,
                                                  vk::IndexType::eUint32);
-                  command_buffer.drawIndexed(m_offscreen_quads.num_indices, 1, 0, 0, 1);
+                  command_buffer.drawIndexed(6, 1, 0, 0, 1);
 
                   /* NOTE: Everything below here is the previous version of how we bound each mesh
                    * to the Render pass. Instead we are now using a single quad for the final pass.
