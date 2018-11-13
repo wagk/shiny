@@ -30,21 +30,25 @@ out gl_PerVertex
 
 void main() 
 {
-	vec4 tmpPos = vec4(inPos, 1.0f) + ubo.instancePos[gl_InstanceIndex];
+	vec4 tmpPos = vec4(inPos.xyz, 1.0) + ubo.instancePos[gl_InstanceIndex];
+	//vec4 tmpPos = inPos + ubo.instancePos[gl_InstanceIndex];
 
 	gl_Position = ubo.projection * ubo.view * ubo.model * tmpPos;
 	
 	outUV = inUV;
-	outUV.t = 1.0 - outUV.t;
+	//outUV.t = 1.0 - outUV.t;
 
 	// Vertex position in world space
-	outWorldPos = vec3(ubo.model * tmpPos);
+	outWorldPos = (ubo.view * ubo.model * tmpPos).xyz;
 	// GL to Vulkan coord space
 	outWorldPos.y = -outWorldPos.y;
 	
 	// Normal in world space
-	mat3 mNormal = transpose(inverse(mat3(ubo.model)));
-	outNormal = mNormal * normalize(inNormal);	
+	mat3 mNormal = transpose(inverse(mat3(ubo.view * ubo.model)));
+	// mat3 mNormal = inverse(mat3(ubo.model));
+	// outNormal = mat3(ubo.view * ubo.model) * inNormal;
+	// outTangent = mat3(ubo.view * ubo.model) * inTangent;
+	outNormal = mNormal * normalize(inNormal);
 	outTangent = mNormal * normalize(inTangent);
 	
 	// Currently just vertex color

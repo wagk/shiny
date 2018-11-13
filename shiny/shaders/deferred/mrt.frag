@@ -18,11 +18,11 @@ layout (location = 2) out vec4 outAlbedo;
 
 void main() 
 {
-	outPosition = vec4(inWorldPos, 1.0);
+	outPosition = vec4(inWorldPos.xyz, 1.0);
 
 	// Calculate normal in tangent space
 	vec3 N = normalize(inNormal);
-	N.y = -N.y;
+	//N.y = -N.y;
 	vec3 T = normalize(inTangent);
 	vec3 B = cross(N, T);
 	mat3 TBN = mat3(T, B, N);

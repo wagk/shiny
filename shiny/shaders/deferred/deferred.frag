@@ -3,9 +3,9 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 
-layout (binding = 1) uniform sampler2D samplerposition;
-layout (binding = 2) uniform sampler2D samplerNormal;
-layout (binding = 3) uniform sampler2D samplerAlbedo;
+layout (set = 0, binding = 1) uniform sampler2D samplerposition;
+layout (set = 0, binding = 2) uniform sampler2D samplerNormal;
+layout (set = 0, binding = 3) uniform sampler2D samplerAlbedo;
 
 layout (location = 0) in vec2 inUV;
 
@@ -71,5 +71,10 @@ void main()
 		}	
 	}    	
    
-  outFragcolor = vec4(fragcolor, 1.0);	
+  //outFragcolor = vec4(fragcolor, 1.0);
+
+  // Debug visualizations
+  //outFragcolor = vec4(inUV.x, inUV.y, 0.0 , 1.0);
+  //outFragcolor = vec4(fragPos, 1.0);
+  outFragcolor = vec4(albedo.rgb, 1.0);
 }
