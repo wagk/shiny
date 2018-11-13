@@ -93,6 +93,7 @@ shadow map generation.
 #define UNREFERENCED_PARAMETER(P) (P)
 
 namespace {
+const bool debugDisplay = false;
 
 const uint32_t WIDTH  = 1280;
 const uint32_t HEIGHT = 800;
@@ -858,16 +859,16 @@ renderer::generateQuads()
                                  { 1.0f, 1.0f },
                                  { 1.0f, 1.0f, 1.0f },
                                  { 0.0f, 0.0f, (float)i } });
-        vertexBuffer.push_back({ { x + 1.0f, y, 0.0f },
-                                 { 1.0f, 0.0f },
+        vertexBuffer.push_back({ { x, y + 1.0f, 0.0f },
+                                 { 0.0f, 1.0f },
                                  { 1.0f, 1.0f, 1.0f },
                                  { 0.0f, 0.0f, (float)i } });
         vertexBuffer.push_back({ { x + 0.0f, y, 0.0f },
                                  { 0.0f, 0.0f },
                                  { 1.0f, 1.0f, 1.0f },
                                  { 0.0f, 0.0f, (float)i } });
-        vertexBuffer.push_back({ { x, y + 1.0f, 0.0f },
-                                 { 0.0f, 1.0f },
+        vertexBuffer.push_back({ { x + 1.0f, y, 0.0f },
+                                 { 1.0f, 0.0f },
                                  { 1.0f, 1.0f, 1.0f },
                                  { 0.0f, 0.0f, (float)i } });
         x += 1.0f;
@@ -892,7 +893,7 @@ renderer::generateQuads()
 
     createIndexBuffer(m_offscreen_quads, indexBuffer);
 
-    createUniformBuffer(m_offscreen_quads, sizeof(uniformbufferobject));
+    createUniformBuffer(m_offscreen_quads, sizeof(uint32_t) * indexBuffer.size());
 
     m_offscreen_quads.device = &m_device;
 }
@@ -1539,8 +1540,18 @@ renderer::createGraphicsPipeline()
         std::runtime_error("Error creating deferred pipeline!\n");
     }
 
-    // Offscreen pipeline
+    // Debug display pipeline
     pipelinecreateinfo.pVertexInputState = &vertexinputinfo;
+    shaderstages[0] =
+      loadShader("main", "shaders/deferred/debug.vert.spv", vk::ShaderStageFlagBits::eVertex);
+    shaderstages[1] =
+      loadShader("main", "shaders/deferred/debug.frag.spv", vk::ShaderStageFlagBits::eFragment);
+    if (!(m_graphics_pipelines.debug =
+            m_device.createGraphicsPipeline(m_pipeline_cache, pipelinecreateinfo))) {
+        std::runtime_error("Error creating debug pipeline!\n");
+    }
+
+    // Offscreen pipeline
     shaderstages[0] =
       loadShader("main", "shaders/deferred/mrt.vert.spv", vk::ShaderStageFlagBits::eVertex);
     shaderstages[1] =
@@ -1884,6 +1895,19 @@ renderer::buildCommandBuffers()
                                                     &m_offscreen_quads.descriptor_set, 0, NULL);
 
                   // TODO: Add debugdisplay boolean that allows us to set debug view
+                  if (debugDisplay) {
+                      command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                                                  m_graphics_pipelines.debug);
+                      command_buffer.bindIndexBuffer(m_offscreen_quads.index_buffer, 0,
+                                                     vk::IndexType::eUint32);
+                      command_buffer.drawIndexed(m_offscreen_quads.num_indices, 1, 0, 0, 1);
+
+                      viewport.x      = viewport.width * 0.5f;
+                      viewport.y      = viewport.height * 0.5f;
+                      viewport.width  = viewport.width * 0.5f;
+                      viewport.height = viewport.height * 0.5f;
+                      command_buffer.setViewport(0, 1, &viewport);
+                  }
 
 
                   // Final composition is a full screen quad
@@ -2263,7 +2287,9 @@ renderer::prepareOffscreenFramebuffer()
       .setMaxAnisotropy(1.0f)
       .setMinLod(0.0f)
       .setMaxLod(1.0f)
-      .setBorderColor(vk::BorderColor::eFloatOpaqueWhite);
+      .setBorderColor(vk::BorderColor::eFloatOpaqueWhite)
+      .setUnnormalizedCoordinates(false)
+      .setCompareEnable(false);
     // m_device.createSampler(&sampler, nullptr, &m_color_sampler);
 
     if (!(m_color_sampler = m_device.createSampler(sampler))) {
@@ -2415,10 +2441,12 @@ renderer::createDescriptorPool()
 {
     std::array<vk::DescriptorPoolSize, 2> descriptorPoolSizes = {};
     // Uniform buffers : 3 for scene UBOs and 1 per object (scene and local matrices)
-    descriptorPoolSizes[0].setType(vk::DescriptorType::eUniformBuffer).setDescriptorCount(6);
+    descriptorPoolSizes[0].setType(vk::DescriptorType::eUniformBuffer).setDescriptorCount(20);
     //.setDescriptorCount(5 + static_cast<uint32_t>(m_meshes.size()));
     // Combined image samples : 4 for the render targets, 1 per mesh texture
-    descriptorPoolSizes[1].setType(vk::DescriptorType::eCombinedImageSampler).setDescriptorCount(7);
+    descriptorPoolSizes[1]
+      .setType(vk::DescriptorType::eCombinedImageSampler)
+      .setDescriptorCount(21);
     //.setDescriptorCount(4 + static_cast<uint32_t>(m_meshes.size()));
 
     auto poolinfo = vk::DescriptorPoolCreateInfo()
@@ -2580,7 +2608,7 @@ m_device.updateDescriptorSets(static_cast<uint32_t>(ddescriptorWrites.size()),
         m_uniform_buffers.vsOffscreen_des = vk::DescriptorBufferInfo()
                                               .setBuffer(m_uniform_buffers.vsOffScreen)
                                               .setOffset(0)
-                                              .setRange(VK_WHOLE_SIZE);
+                                              .setRange(sizeof(uboOffscreenVS));
 
         mesh.diffuse_tex.descriptor = vk::DescriptorImageInfo()
                                         .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
@@ -2816,12 +2844,11 @@ renderer::updateUniformBuffer()
       std::chrono::duration<float, std::chrono::seconds::period>(current_t - start_t).count();
 
     // uniformbufferobject ubo;
-    m_camera.model = glm::mat4(1.0f);
-    // m_camera.model = glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f,
-    // 0.f));
+    // m_camera.model = glm::mat4(1.0f);
+    m_camera.model =
+      glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f, 0.f));
     m_camera.view =
       glm::lookAt(glm::vec3(0.f, 2.f, 7.5f), glm::vec3(0.f, 2.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
-
     m_camera.proj =
       glm::perspective(glm::radians(45.0f), (float)m_win_width / (float)m_win_height, 0.1f, 100.0f);
 
@@ -2857,8 +2884,12 @@ for (auto& mesh : m_meshes) {
 void
 renderer::updateUniformBuffersScreen()
 {
-    uboVS.projection = glm::ortho(0.0f, 1.0f, 0.0f, 1.0f, -1.0f, 1.0f);
-    uboVS.model      = glm::mat4(1.0f);
+    if (debugDisplay) {
+        uboVS.projection = glm::ortho(0.0f, 2.0f, 0.0f, 1.0f, -1.0f, 1.0f);
+    } else {
+        uboVS.projection = glm::ortho(0.0f, 1.0f, 0.0f, 1.0f, -1.0f, 1.0f);
+    }
+    uboVS.model = glm::mat4(1.0f);
 
     withMappedMemory(m_uniform_buffers.vsFullScreen_mem, 0, sizeof(uboVS),
                      [=](void* data) { std::memcpy(data, &uboVS, sizeof(uboVS)); });
@@ -2870,8 +2901,8 @@ renderer::updateUniformBufferDeferredMatrices()
 
     uboOffscreenVS.projection = m_camera.proj;
     uboOffscreenVS.view       = m_camera.view;
-    // uboOffscreenVS.model      = m_camera.model;
-    uboOffscreenVS.model = glm::mat4(1.0f);
+    uboOffscreenVS.model      = m_camera.model;
+    // uboOffscreenVS.model = glm::mat4(1.0f);
 
     withMappedMemory(m_uniform_buffers.vsOffScreen_mem, 0, sizeof(uboOffscreenVS), [=](void* data) {
         std::memcpy(data, &uboOffscreenVS, sizeof(uboOffscreenVS));

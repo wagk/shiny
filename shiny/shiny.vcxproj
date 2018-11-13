@@ -134,6 +134,8 @@
 glslangvalidator -V $(ProjectDir)shaders\deferred\deferred.frag -o $(ProjectDir)shaders\deferred\deferred.frag.spv
 glslangvalidator -V $(ProjectDir)shaders\deferred\mrt.vert -o $(ProjectDir)shaders\deferred\mrt.vert.spv
 glslangvalidator -V $(ProjectDir)shaders\deferred\mrt.frag -o $(ProjectDir)shaders\deferred\mrt.frag.spv
+glslangvalidator -V $(ProjectDir)shaders\deferred\debug.vert -o $(ProjectDir)shaders\deferred\debug.vert.spv
+glslangvalidator -V $(ProjectDir)shaders\deferred\debug.frag -o $(ProjectDir)shaders\deferred\debug.frag.spv
 </Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
@@ -476,6 +478,12 @@ glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders
     <None Include="include\glm\gtx\vector_angle.inl" />
     <None Include="include\glm\gtx\vector_query.inl" />
     <None Include="include\glm\gtx\wrap.inl" />
+    <None Include="shaders\deferred\debug.frag">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="shaders\deferred\debug.vert">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </None>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

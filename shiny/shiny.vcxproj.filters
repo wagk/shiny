@@ -844,5 +844,7 @@
     <None Include="include\glm\gtx\wrap.inl">
       <Filter>Header Files</Filter>
     </None>
+    <None Include="shaders\deferred\debug.frag" />
+    <None Include="shaders\deferred\debug.vert" />
   </ItemGroup>
 </Project>
