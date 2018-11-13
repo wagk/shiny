@@ -122,8 +122,8 @@ const std::array<float, 4> backgroundColor = { 0.033f, 0.111f, 0.124f, 1.0f };
 //
 // const shiny::graphics::Mesh triangle_mesh(triangle_vertices, triangle_indices);
 
-// const std::vector<std::string> all_model_filenames = { "models/imrodnew.fbx" };
-const std::vector<std::string> all_model_filenames = { "models/singleCubeSelection.fbx" };
+const std::vector<std::string> all_model_filenames = { "models/imrodnew.fbx" };
+// const std::vector<std::string> all_model_filenames = { "models/singleCubeSelection.fbx" };
 //"models/singleCubeSelection.fbx" };
 
 const std::vector<std::string> all_texture_filenames = { "textures/Imrod_Diffuse.png",
@@ -611,31 +611,36 @@ renderer::getAttributeDescription()
           .setFormat(vk::Format::eR32G32B32Sfloat)
           // The offset parameter specifies the number of bytes since the start of the per-vertex
           // data to read from.
-          .setOffset(offsetof(Vertex, pos)),
+          .setOffset(0),
+        //.setOffset(offsetof(Vertex, pos)),
         /*TexCoord Description*/
         vk::VertexInputAttributeDescription()
           .setBinding(0)
           .setLocation(1)
           .setFormat(vk::Format::eR32G32Sfloat)
-          .setOffset(offsetof(Vertex, texcoord)),
+          .setOffset(sizeof(float) * 3),
+        //.setOffset(offsetof(Vertex, texcoord)),
         /*Color Description*/
         vk::VertexInputAttributeDescription()
           .setBinding(0)
           .setLocation(2)
           .setFormat(vk::Format::eR32G32B32Sfloat)
-          .setOffset(offsetof(Vertex, color)),
+          .setOffset(sizeof(float) * 5),
+        //.setOffset(offsetof(Vertex, color)),
         /*Normal Description*/
         vk::VertexInputAttributeDescription()
           .setBinding(0)
           .setLocation(3)
           .setFormat(vk::Format::eR32G32B32Sfloat)
-          .setOffset(offsetof(Vertex, normal)),
+          .setOffset(sizeof(float) * 8),
+        //.setOffset(offsetof(Vertex, normal)),
         /*Tangent Description*/
         vk::VertexInputAttributeDescription()
           .setBinding(0)
           .setLocation(4)
           .setFormat(vk::Format::eR32G32B32Sfloat)
-          .setOffset(offsetof(Vertex, tangent))
+          .setOffset(sizeof(float) * 11)
+        //.setOffset(offsetof(Vertex, tangent))
     };
 }
 
@@ -853,16 +858,16 @@ renderer::generateQuads()
                                  { 1.0f, 1.0f },
                                  { 1.0f, 1.0f, 1.0f },
                                  { 0.0f, 0.0f, (float)i } });
-        vertexBuffer.push_back({ { x, y + 1.0f, 0.0f },
-                                 { 0.0f, 1.0f },
+        vertexBuffer.push_back({ { x + 1.0f, y, 0.0f },
+                                 { 1.0f, 0.0f },
                                  { 1.0f, 1.0f, 1.0f },
                                  { 0.0f, 0.0f, (float)i } });
         vertexBuffer.push_back({ { x + 0.0f, y, 0.0f },
                                  { 0.0f, 0.0f },
                                  { 1.0f, 1.0f, 1.0f },
                                  { 0.0f, 0.0f, (float)i } });
-        vertexBuffer.push_back({ { x + 1.0f, y, 0.0f },
-                                 { 1.0f, 0.0f },
+        vertexBuffer.push_back({ { x, y + 1.0f, 0.0f },
+                                 { 0.0f, 1.0f },
                                  { 1.0f, 1.0f, 1.0f },
                                  { 0.0f, 0.0f, (float)i } });
         x += 1.0f;
@@ -1370,14 +1375,14 @@ renderer::createGraphicsPipeline()
         //    VK_POLYGON_MODE_LINE: polygon edges are drawn as lines
         //    VK_POLYGON_MODE_POINT: polygon vertices are drawn as points
         // Using any mode other than fill requires enabling a GPU feature.
-        .setPolygonMode(vk::PolygonMode::eLine)
+        .setPolygonMode(vk::PolygonMode::eFill)
         // The lineWidth member is straightforward, it describes the thickness of lines in terms of
         // number of fragments. The maximum line width that is supported depends on the hardware and
         // any line thicker than 1.0f requires you to enable the wideLines GPU feature.
         .setLineWidth(1.f)
         // The cullMode variable determines the type of face culling to use. You can disable
         // culling, cull the front faces, cull the back faces or both.
-        .setCullMode(vk::CullModeFlagBits::eNone)
+        .setCullMode(vk::CullModeFlagBits::eBack)
         // The frontFace variable specifies the vertex order for faces to be considered front-facing
         // and can be clockwise or counterclockwise.
         .setFrontFace(vk::FrontFace::eClockwise)
@@ -1535,6 +1540,7 @@ renderer::createGraphicsPipeline()
     }
 
     // Offscreen pipeline
+    pipelinecreateinfo.pVertexInputState = &vertexinputinfo;
     shaderstages[0] =
       loadShader("main", "shaders/deferred/mrt.vert.spv", vk::ShaderStageFlagBits::eVertex);
     shaderstages[1] =
@@ -1819,8 +1825,7 @@ renderer::buildCommandBuffers()
     clearValues[1].setDepthStencil(vk::ClearDepthStencilValue(1.0f, 0));
 
     // Render Area
-    auto renderarea =
-      vk::Rect2D({ 0, 0 }, vk::Extent2D(m_swapchain_struct.width, m_swapchain_struct.height));
+    auto renderarea = vk::Rect2D({ 0, 0 }, vk::Extent2D(m_win_width, m_win_height));
 
     // Create Render pass begin info
     auto renderpassinfo =
@@ -2301,7 +2306,7 @@ renderer::prepareUniformBuffers()
     uboOffscreenVS.instancePos[2] = glm::vec4(4.0f, 0.0, -4.0f, 0.0f);
 
     // Update
-    updateUniformBuffer();  // update the camera
+    // updateUniformBuffer();  // update the camera
     updateUniformBuffersScreen();
     updateUniformBufferDeferredMatrices();
     updateUniformBufferDeferredLights();
@@ -2811,14 +2816,14 @@ renderer::updateUniformBuffer()
       std::chrono::duration<float, std::chrono::seconds::period>(current_t - start_t).count();
 
     // uniformbufferobject ubo;
-    // m_camera.model = glm::mat4(1.0f);
-    m_camera.model =
-      glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f, 0.f));
+    m_camera.model = glm::mat4(1.0f);
+    // m_camera.model = glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f,
+    // 0.f));
     m_camera.view =
       glm::lookAt(glm::vec3(0.f, 2.f, 7.5f), glm::vec3(0.f, 2.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
+
     m_camera.proj =
-      glm::perspective(glm::radians(45.0f),
-                       m_swapchain_struct.width / (float)m_swapchain_struct.height, 0.1f, 100.0f);
+      glm::perspective(glm::radians(45.0f), (float)m_win_width / (float)m_win_height, 0.1f, 100.0f);
 
     // GLM was originally designed for OpenGL, where the Y coordinate of the clip coordinates is
     // inverted. The easiest way to compensate for that is to flip the sign on the scaling factor of
@@ -2839,14 +2844,14 @@ renderer::updateUniformBuffer()
     /*m_meshes[1].matrices.model = glm::translate(m_camera.model, glm::vec3(1.5f, 0.5f, 1.0f));
     m_meshes[1].matrices.model = glm::rotate(m_meshes[1].matrices.model, time * glm::radians(60.f),
                                              glm::vec3(1.0f, 1.0f, 1.0f));*/
-
-    for (auto& mesh : m_meshes) {
-        mesh.matrices.proj = m_camera.proj;
-        mesh.matrices.view = m_camera.view;
-        withMappedMemory(
-          mesh.uniform_buffer_memory, 0, sizeof(uniformbufferobject),
-          [=](void* data) { std::memcpy(data, &mesh.matrices, sizeof(uniformbufferobject)); });
-    }
+    /*
+for (auto& mesh : m_meshes) {
+    mesh.matrices.proj = m_camera.proj;
+    mesh.matrices.view = m_camera.view;
+    withMappedMemory(
+      mesh.uniform_buffer_memory, 0, sizeof(uniformbufferobject),
+      [=](void* data) { std::memcpy(data, &mesh.matrices, sizeof(uniformbufferobject)); });
+}*/
 }
 
 void
@@ -2865,8 +2870,8 @@ renderer::updateUniformBufferDeferredMatrices()
 
     uboOffscreenVS.projection = m_camera.proj;
     uboOffscreenVS.view       = m_camera.view;
-    uboOffscreenVS.model      = m_camera.model;
-    // uboOffscreenVS.model = glm::mat4(1.0f);
+    // uboOffscreenVS.model      = m_camera.model;
+    uboOffscreenVS.model = glm::mat4(1.0f);
 
     withMappedMemory(m_uniform_buffers.vsOffScreen_mem, 0, sizeof(uboOffscreenVS), [=](void* data) {
         std::memcpy(data, &uboOffscreenVS, sizeof(uboOffscreenVS));
@@ -2904,7 +2909,11 @@ renderer::updateUniformBufferDeferredLights()
     // Current view position
     // glm::vec4 camPos = glm::vec4(m_camera.)
     // Temporarily hard code the camera position
-    uboFragmentLights.viewPos = glm::vec4(0.f, 2.f, 7.5f, 0.f);
+    // uboFragmentLights.viewPos = glm::vec4(0.f, 2.f, 7.5f, 0.f);
+    glm::mat4 worldMat        = m_camera.model * m_camera.view;
+    glm::vec4 translation     = worldMat[3];
+    translation.w             = 0.0f;
+    uboFragmentLights.viewPos = translation * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);
 
     withMappedMemory(m_uniform_buffers.fsLights_mem, 0, sizeof(uboFragmentLights), [=](void* data) {
         std::memcpy(data, &uboFragmentLights, sizeof(uboFragmentLights));
@@ -2917,9 +2926,11 @@ renderer::loadAssets()
 {
     // TEMPORARY: Camera settings here
     m_camera.model;
+    // m_camera.view = glm::ortho(-4.0f / 3.0f, 4.0f / 3.0f, -1.0f, 1.0f, -1.0f, 1.0f);
+    m_camera.view =
+      glm::lookAt(glm::vec3(0.f, 2.f, 7.5f), glm::vec3(0.f, 2.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
     m_camera.proj =
-      glm::lookAt(glm::vec3(0.f, 3.f, 5.f), glm::vec3(0.f, 3.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
-    m_camera.view = glm::ortho(-4.0f / 3.0f, 4.0f / 3.0f, -1.0f, 1.0f, -1.0f, 1.0f);
+      glm::perspective(glm::radians(60.0f), m_win_width / (float)m_win_height, 0.1f, 100.0f);
     m_camera.proj[1][1] *= -1;
 
     // Load models and Textures
@@ -3738,7 +3749,7 @@ renderer::mainLoop()
         glfwPollEvents();
         drawFrame();
         updateUniformBuffer();
-        updateUniformBuffersScreen();
+        // updateUniformBuffersScreen();
         updateUniformBufferDeferredMatrices();
         updateUniformBufferDeferredLights();
     }

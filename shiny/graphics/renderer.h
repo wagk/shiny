@@ -67,7 +67,7 @@ struct Vertex
 struct Mesh
 {
     Mesh() {}
-    uniformbufferobject      matrices;
+    // uniformbufferobject      matrices;
     vk::Device*              device;
     uint32_t                 num_vertices;
     uint32_t                 num_indices;
