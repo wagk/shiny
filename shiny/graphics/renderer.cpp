@@ -720,7 +720,7 @@ renderer::drawFrame()
 
     // Submit work
     m_submit_info.setPCommandBuffers(&m_command_buffers[m_current_frame]);
-    m_graphics_queue.submit(m_submit_info, nullptr);
+    m_graphics_queue.submit(1, &m_submit_info, nullptr);
 
     submitFrame();
     // m_current_frame = (m_current_frame + 1) % max_frames_in_flight;
@@ -1244,7 +1244,12 @@ renderer::createRenderPass()
                      // pPreserveAttachments: Attachments that are not used by this subpass, but for
                      // which the data must be preserved
                      .setPColorAttachments(&colorattachmentref)
-                     .setPDepthStencilAttachment(&depthattachmentref);
+                     .setPDepthStencilAttachment(&depthattachmentref)
+                     .setInputAttachmentCount(0)
+                     .setPInputAttachments(nullptr)
+                     .setPreserveAttachmentCount(0)
+                     .setPPreserveAttachments(nullptr)
+                     .setPResolveAttachments(nullptr);
 
     // Remember that the subpasses in a render pass automatically take care of image layout
     // transitions. These transitions are controlled by subpass dependencies, which specify memory
@@ -1284,7 +1289,8 @@ renderer::createRenderPass()
       // colors to it.
       .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput)
       .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentRead
-                        | vk::AccessFlagBits::eColorAttachmentWrite);
+                        | vk::AccessFlagBits::eColorAttachmentWrite)
+      .setDependencyFlags(vk::DependencyFlagBits::eByRegion);
 
     subpassdependencies[1]
       .setSrcSubpass(0)
@@ -1293,7 +1299,8 @@ renderer::createRenderPass()
       .setSrcAccessMask(vk::AccessFlagBits::eColorAttachmentRead
                         | vk::AccessFlagBits::eColorAttachmentWrite)
       .setDstStageMask(vk::PipelineStageFlagBits::eBottomOfPipe)
-      .setDstAccessMask(vk::AccessFlagBits::eMemoryRead);
+      .setDstAccessMask(vk::AccessFlagBits::eMemoryRead)
+      .setDependencyFlags(vk::DependencyFlagBits::eByRegion);
 
     std::array<vk::AttachmentDescription, 2> attachments = { colorattachment, depthattachment };
 
@@ -3856,11 +3863,14 @@ renderer::prepareFrame()
 void
 renderer::submitFrame()
 {
+    std::array<vk::Result, 5> sc_results;
+
     auto presentInfo = vk::PresentInfoKHR()
                          .setPNext(NULL)
                          .setSwapchainCount(1)
                          .setPSwapchains(&m_swapchain_struct.swapchain)
-                         .setPImageIndices(&m_current_frame);
+                         .setPImageIndices(&m_current_frame)
+                         .setPResults(sc_results.data());
 
     // Check if a wait semaphore has been specified to wait for before presenting the image
     if (m_render_complete) {
