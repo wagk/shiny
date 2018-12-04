@@ -6,9 +6,9 @@
 
 #include <graphics/renderer.h>
 
-#define WINDOW_WIDTH 1280
-#define WINDOW_HEIGHT 720
-#define MAX_LOADSTRING 100
+// #define WINDOW_WIDTH 1280
+// #define WINDOW_HEIGHT 720
+// #define MAX_LOADSTRING 100
 
 // This is the old main. Keeping this as a fallback until I get the rest setup right
 int

@@ -654,8 +654,7 @@ renderer::run()
 {
     initWindow();
     initVulkan();
-    // TODO: Maybe put another function here to split up the work done by initVulkan(). Like a
-    // Prepare();
+    prepare();
     mainLoop();
     cleanup();
 }
@@ -2499,7 +2498,7 @@ renderer::createDescriptorSet()
 
 
     m_uniform_buffers.fsLights_des = vk::DescriptorBufferInfo()
-                                       .setBuffer(m_offscreen_quads.uniform_buffer)
+                                       .setBuffer(m_uniform_buffers.fsLights)
                                        .setOffset(0)
                                        .setRange(sizeof(uboFragmentLights));
 
@@ -3682,9 +3681,24 @@ refer to renderer::recreateSwapChain()
 void
 renderer::cleanupSwapChain()
 {
+    // FrameBuffer
+    m_device.destroyFramebuffer(m_offscreen_framebuffer.frameBuffer);
+    // Depth
     m_device.destroyImageView(m_offscreen_framebuffer.depth.image_view);
     m_device.destroyImage(m_offscreen_framebuffer.depth.image);
     m_device.freeMemory(m_offscreen_framebuffer.depth.memory);
+    // Albedo
+    m_device.destroyImageView(m_offscreen_framebuffer.albedo.image_view);
+    m_device.destroyImage(m_offscreen_framebuffer.albedo.image);
+    m_device.freeMemory(m_offscreen_framebuffer.albedo.memory);
+    // Normal
+    m_device.destroyImageView(m_offscreen_framebuffer.normal.image_view);
+    m_device.destroyImage(m_offscreen_framebuffer.normal.image);
+    m_device.freeMemory(m_offscreen_framebuffer.normal.memory);
+    // Position
+    m_device.destroyImageView(m_offscreen_framebuffer.position.image_view);
+    m_device.destroyImage(m_offscreen_framebuffer.position.image);
+    m_device.freeMemory(m_offscreen_framebuffer.position.memory);
 
     for (auto& buffer : m_swapchain_struct.buffers) {
         m_device.destroyImage(buffer.image);
@@ -3764,8 +3778,12 @@ renderer::initVulkan()
     createRenderPass();
     createPipelineCache();
     createFramebuffers();
+}
 
-    // Might want to move everything below this line to some other helper function
+void
+renderer::prepare()
+{
+    // This is all called after vulkan is initialized
     loadAssets();
     generateQuads();
     prepareOffscreenFramebuffer();
@@ -3803,7 +3821,24 @@ renderer::cleanup()
         m_device.destroySemaphore(m_image_available_semaphores[i], nullptr);
         m_device.destroyFence(m_in_flight_fences[i], nullptr);
     }*/
+    // Cleanup the SwapChain
+    cleanupSwapChain();
 
+    // TODO: Clean up Textures
+    // Samplers
+    // ImageViews
+    // Images
+    // Memory
+
+    // TODO: Clean up Descriptor Pool
+
+    // TODO: Clean up Descriptor Set Layout
+
+    // Clean up uniformbuffers?
+
+    // Clean up Meshes (index and vertex buffers and memory)
+
+    // Clean up Semaphores, and Fences
     for (auto& fence : m_wait_fences) {
         m_device.destroyFence(fence);
     }
@@ -3815,8 +3850,6 @@ renderer::cleanup()
     for (auto& semaphore : m_render_finished_semaphores) {
         m_device.destroySemaphore(semaphore);
     }
-
-    cleanupSwapChain();
 
     m_device.destroyDescriptorPool(m_descriptor_pool);
     m_device.destroyDescriptorSetLayout(m_descriptor_set_layout);
@@ -3830,6 +3863,10 @@ renderer::cleanup()
 
     m_device.destroyShaderModule(m_vertex_shader_module);
     m_device.destroyShaderModule(m_fragment_shader_module);
+
+    for (auto shadermodule : m_shader_modules) {
+        m_device.destroyShaderModule(shadermodule);
+    }
 
     m_device.destroy();
 

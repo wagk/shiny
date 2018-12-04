@@ -181,6 +181,7 @@ public:
 private:
     void initWindow();
     void initVulkan();
+    void prepare();
     void mainLoop();
     void cleanup();
 
