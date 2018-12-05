@@ -43,14 +43,15 @@ void main()
 	// GL to Vulkan coord space
 	outWorldPos.y = -outWorldPos.y;
 	
-	// Normal in world space
-	//mat3 mNormal = transpose(inverse(mat3(ubo.view * ubo.model)));
+	// Normal and Tangent in world space
+	mat3 mNormal = transpose(inverse(mat3(ubo.view * ubo.model)));
 	//mat3 mNormal = transpose(inverse(mat3(ubo.model)));
-	mat3 mNormal = inverse(mat3(ubo.view * ubo.model));
-	//outNormal = mNormal * normalize(inNormal);
-	//outTangent = mNormal * normalize(inTangent);
-	outNormal = mat3(ubo.view * ubo.model) * normalize(inNormal);
-	outTangent = mat3(ubo.view * ubo.model) * normalize(inTangent);
+	//mat3 mNormal = inverse(mat3(ubo.view * ubo.model));
+	//mat3 mNormal = transpose(mat3(ubo.view * ubo.model));
+	//mat3 mNormal = mat3(ubo.view * ubo.model);
+	//mat3 mNormal = mat3(ubo.model * ubo.view);
+	outNormal = mNormal * normalize(inNormal);
+	outTangent = mNormal * normalize(inTangent);
 	
 	// Currently just vertex color
 	outColor = inColor;

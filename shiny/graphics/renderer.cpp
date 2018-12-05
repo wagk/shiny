@@ -2956,13 +2956,14 @@ void
 renderer::loadAssets()
 {
     // TEMPORARY: Camera settings here
-    m_camera.setPosition(glm::vec3(2.15f, 0.3f, 8.75f));
+    m_camera.setPosition(glm::vec3(2.15f, 5.3f, 8.75f));
     m_camera.setRotation(glm::vec3(-0.75f, 12.5f, 0.0f));
     m_camera.setPerspective(60.0f, (float)m_win_width / (float)m_win_height, 0.1f, 256.0f);
     // m_camera.model;
     // m_camera.view = glm::ortho(-4.0f / 3.0f, 4.0f / 3.0f, -1.0f, 1.0f, -1.0f, 1.0f);
     m_camera.matrices.view =
-      glm::lookAt(m_camera.position, glm::vec3(0.f, 2.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
+      glm::lookAt(m_camera.position, glm::vec3(0.f, 2.f, 0.f), glm::vec3(0.f, -1.f, 0.f));
+    // m_camera.matrices.perspective[1][1] *= -1;
     /*m_camera.proj =
       glm::perspective(glm::radians(60.0f), m_win_width / (float)m_win_height, 0.1f, 100.0f);
     m_camera.proj[1][1] *= -1;*/

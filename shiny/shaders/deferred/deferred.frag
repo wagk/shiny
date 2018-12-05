@@ -71,10 +71,11 @@ void main()
 		}	
 	}    	
    
-  //outFragcolor = vec4(fragcolor, 1.0);
+  outFragcolor = vec4(fragcolor, 1.0);
 
   // Debug visualizations
+  //outFragcolor = vec4(1.0, 0.0, 0.0, 1.0);
   //outFragcolor = vec4(inUV.x, inUV.y, 0.0 , 1.0);
   //outFragcolor = vec4(fragPos, 1.0);
-  outFragcolor = texture(samplerAlbedo, inUV);
+  //outFragcolor = vec4(albedo.rgb, 1.0);
 }
