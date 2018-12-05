@@ -3,7 +3,7 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 
-layout (location = 0) in vec3 inPos;
+layout (location = 0) in vec4 inPos;
 layout (location = 1) in vec2 inUV;
 layout (location = 2) in vec3 inColor;
 layout (location = 3) in vec3 inNormal;
@@ -30,8 +30,8 @@ out gl_PerVertex
 
 void main() 
 {
-	vec4 tmpPos = vec4(inPos.xyz, 1.0) + ubo.instancePos[gl_InstanceIndex];
-	//vec4 tmpPos = inPos + ubo.instancePos[gl_InstanceIndex];
+	//vec4 tmpPos = vec4(inPos.xyz, 1.0) + ubo.instancePos[gl_InstanceIndex];
+	vec4 tmpPos = inPos + ubo.instancePos[gl_InstanceIndex];
 
 	gl_Position = ubo.projection * ubo.view * ubo.model * tmpPos;
 	
@@ -44,11 +44,11 @@ void main()
 	outWorldPos.y = -outWorldPos.y;
 	
 	// Normal and Tangent in world space
-	mat3 mNormal = transpose(inverse(mat3(ubo.view * ubo.model)));
+	//mat3 mNormal = transpose(inverse(mat3(ubo.view * ubo.model)));
 	//mat3 mNormal = transpose(inverse(mat3(ubo.model)));
 	//mat3 mNormal = inverse(mat3(ubo.view * ubo.model));
 	//mat3 mNormal = transpose(mat3(ubo.view * ubo.model));
-	//mat3 mNormal = mat3(ubo.view * ubo.model);
+	mat3 mNormal = mat3(ubo.view * ubo.model);
 	//mat3 mNormal = mat3(ubo.model * ubo.view);
 	outNormal = mNormal * normalize(inNormal);
 	outTangent = mNormal * normalize(inTangent);

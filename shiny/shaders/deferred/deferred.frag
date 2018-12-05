@@ -32,7 +32,7 @@ void main()
 	vec4 albedo = texture(samplerAlbedo, inUV);
 	
 	#define lightCount 6
-	#define ambient 1.0
+	#define ambient 0.0
 	
 	// Ambient part
 	vec3 fragcolor  = albedo.rgb * ambient;
@@ -71,7 +71,7 @@ void main()
 		}	
 	}    	
    
-  outFragcolor = vec4(fragcolor, 1.0);
+  outFragcolor = vec4(fragcolor * 1.3, 1.0);
 
   // Debug visualizations
   // Flat Color
@@ -81,7 +81,7 @@ void main()
   //outFragcolor = vec4(inUV.x, inUV.y, 0.0 , 1.0);
 
   // Position G-Buffer Value
-  outFragcolor = vec4(fragPos, 0.5);
+  //outFragcolor = vec4(fragPos, 0.5);
 
   // Normal G-Buffer Value
   //outFragcolor = vec4(normal, 1.0);

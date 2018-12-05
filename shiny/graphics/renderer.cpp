@@ -1966,15 +1966,16 @@ renderer::buildDeferredCommandBuffer()
     auto semaphoreCreateInfo = vk::SemaphoreCreateInfo();
     m_device.createSemaphore(&semaphoreCreateInfo, nullptr, &m_offscreen_semaphore);
 
-    // Clear valus for all attachments written in the fragment shader
-    std::array<float, 4> colorR = { 1.f, 0.f, 0.f, 0.f };
-    std::array<float, 4> colorG = { 0.f, 1.f, 0.f, 0.f };
-    std::array<float, 4> colorB = { 0.f, 0.f, 1.f, 0.f };
+    // Clear values for all attachments written in the fragment shader
+    std::array<float, 4> colorR  = { 1.f, 0.f, 0.f, 0.f };
+    std::array<float, 4> colorG  = { 0.f, 1.f, 0.f, 0.f };
+    std::array<float, 4> colorB  = { 0.f, 0.f, 1.f, 0.f };
+    std::array<float, 4> NoColor = { 0.f, 0.f, 0.f, 0.f };
 
     std::array<vk::ClearValue, 4> clearValues = {};
-    clearValues[0].setColor(colorR);
-    clearValues[1].setColor(colorG);
-    clearValues[2].setColor(colorB);
+    clearValues[0].setColor(NoColor);
+    clearValues[1].setColor(NoColor);
+    clearValues[2].setColor(NoColor);
     clearValues[3].setDepthStencil(vk::ClearDepthStencilValue(1.0f, 0));
 
     auto renderarea = vk::Rect2D(
@@ -2320,9 +2321,9 @@ renderer::prepareUniformBuffers()
       m_device.mapMemory(m_uniform_buffers.fsLights_mem, 0, sizeof(uboFragmentLights));
 
     // Init ubo values
-    uboOffscreenVS.instancePos[0] = glm::vec4(0.0f);
-    uboOffscreenVS.instancePos[1] = glm::vec4(-4.0f, 0.0, -4.0f, 0.0f);
-    uboOffscreenVS.instancePos[2] = glm::vec4(4.0f, 0.0, -4.0f, 0.0f);
+    uboOffscreenVS.instancePos[0] = glm::vec4(0.0f, 0.0, -2.0f, 0.0f);
+    uboOffscreenVS.instancePos[1] = glm::vec4(-2.0f, 0.0, 0.0f, 0.0f);
+    uboOffscreenVS.instancePos[2] = glm::vec4(2.0f, 0.0, 0.0f, 0.0f);
 
     // Update
     // updateUniformBuffer();  // update the camera
@@ -2953,13 +2954,13 @@ void
 renderer::loadAssets()
 {
     // TEMPORARY: Camera settings here
-    m_camera.setPosition(glm::vec3(2.15f, 5.3f, 8.75f));
+    m_camera.setPosition(glm::vec3(2.3f, 2.0f, 4.3f));
     m_camera.setRotation(glm::vec3(-0.75f, 12.5f, 0.0f));
     m_camera.setPerspective(60.0f, (float)m_win_width / (float)m_win_height, 0.1f, 256.0f);
     // m_camera.model;
     // m_camera.view = glm::ortho(-4.0f / 3.0f, 4.0f / 3.0f, -1.0f, 1.0f, -1.0f, 1.0f);
     m_camera.matrices.view =
-      glm::lookAt(m_camera.position, glm::vec3(0.f, 2.f, 0.f), glm::vec3(0.f, -1.f, 0.f));
+      glm::lookAt(m_camera.position, glm::vec3(0.f, 1.f, 0.f), glm::vec3(0.f, -1.f, 0.f));
     // m_camera.matrices.perspective[1][1] *= -1;
     /*m_camera.proj =
       glm::perspective(glm::radians(60.0f), m_win_width / (float)m_win_height, 0.1f, 100.0f);
@@ -3540,7 +3541,10 @@ renderer::createAttachment(vk::Format             format,
     m_device.bindImageMemory(attachment->image, attachment->memory, 0);
 
     // Create Image View
-    auto imageView = vk::ImageViewCreateInfo().setFormat(format).setImage(attachment->image);
+    auto imageView = vk::ImageViewCreateInfo()
+                       .setFormat(format)
+                       .setImage(attachment->image)
+                       .setViewType(vk::ImageViewType::e2D);
     imageView.subresourceRange.setAspectMask(aspectMask)
       .setBaseMipLevel(0)
       .setLevelCount(1)
