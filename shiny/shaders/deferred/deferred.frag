@@ -3,9 +3,9 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 
-layout (set = 0, binding = 1) uniform sampler2D samplerposition;
-layout (set = 0, binding = 2) uniform sampler2D samplerNormal;
-layout (set = 0, binding = 3) uniform sampler2D samplerAlbedo;
+layout (binding = 1) uniform sampler2D samplerposition;
+layout (binding = 2) uniform sampler2D samplerNormal;
+layout (binding = 3) uniform sampler2D samplerAlbedo;
 
 layout (location = 0) in vec2 inUV;
 
@@ -32,7 +32,7 @@ void main()
 	vec4 albedo = texture(samplerAlbedo, inUV);
 	
 	#define lightCount 6
-	#define ambient 0.0
+	#define ambient 1.0
 	
 	// Ambient part
 	vec3 fragcolor  = albedo.rgb * ambient;
@@ -74,8 +74,18 @@ void main()
   outFragcolor = vec4(fragcolor, 1.0);
 
   // Debug visualizations
+  // Flat Color
   //outFragcolor = vec4(1.0, 0.0, 0.0, 1.0);
+
+  // Screen UV value
   //outFragcolor = vec4(inUV.x, inUV.y, 0.0 , 1.0);
-  //outFragcolor = vec4(fragPos, 1.0);
+
+  // Position G-Buffer Value
+  outFragcolor = vec4(fragPos, 0.5);
+
+  // Normal G-Buffer Value
+  //outFragcolor = vec4(normal, 1.0);
+
+  // Albedo G-Buffer Value
   //outFragcolor = vec4(albedo.rgb, 1.0);
 }

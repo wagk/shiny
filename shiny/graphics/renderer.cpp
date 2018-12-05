@@ -1094,11 +1094,11 @@ if (indices.graphicsFamily() != indices.presentFamily()) {
                              vk::ComponentSwizzle::eB, vk::ComponentSwizzle::eA })
             .setSubresourceRange(ssr)
             .setViewType(vk::ImageViewType::e2D)
-            .setFlags(vk::ImageViewCreateFlagBits(0))
-            .setImage(images[i]);
-
+            .setFlags(vk::ImageViewCreateFlagBits(0));
         m_swapchain_struct.buffers[i].image = images[i];
-        m_swapchain_struct.buffers[i].view  = m_device.createImageView(colorAttachmentView);
+        colorAttachmentView.setImage(m_swapchain_struct.buffers[i].image);
+
+        m_swapchain_struct.buffers[i].view = m_device.createImageView(colorAttachmentView);
     }
 
     m_swapchain_struct.format = surfaceformat.format;
@@ -2260,9 +2260,6 @@ renderer::prepareOffscreenFramebuffer()
                             .setWidth(m_offscreen_framebuffer.width)
                             .setHeight(m_offscreen_framebuffer.height)
                             .setLayers(1);
-
-    // m_device.createFramebuffer(&fbufCreateInfo, nullptr, &m_offscreen_framebuffer.frameBuffer);
-
     if (!(m_offscreen_framebuffer.frameBuffer = m_device.createFramebuffer(fbufCreateInfo))) {
         std::runtime_error("Error creating Offscreen Render Pass!\n");
     }
@@ -2282,8 +2279,6 @@ renderer::prepareOffscreenFramebuffer()
       .setBorderColor(vk::BorderColor::eFloatOpaqueWhite)
       .setUnnormalizedCoordinates(false)
       .setCompareEnable(false);
-    // m_device.createSampler(&sampler, nullptr, &m_color_sampler);
-
     if (!(m_color_sampler = m_device.createSampler(sampler))) {
         std::runtime_error("Error creating Offscreen Render Pass!\n");
     }
@@ -2709,6 +2704,10 @@ renderer::createTextureImage(const std::string filename, Texture& texture)
 
     vk::DeviceSize imagedim = width * height * 4;  // we load RGBA
 
+    texture.width      = static_cast<uint32_t>(width);
+    texture.height     = static_cast<uint32_t>(height);
+    texture.mip_levels = static_cast<uint32_t>(std::floor(std::log2(std::max(width, height)))) + 1;
+
     auto [stagingbuffer, stagingbuffermemory] = createBuffer(
       imagedim, vk::BufferUsageFlagBits::eTransferSrc,
       vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
@@ -2721,30 +2720,28 @@ renderer::createTextureImage(const std::string filename, Texture& texture)
 
     stbi_image_free(pixels);
 
-    std::tie(texture.image, texture.device_memory) =
-      createImage(width, height, vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
-                  vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-                  vk::MemoryPropertyFlagBits::eDeviceLocal);
+    std::tie(texture.image, texture.device_memory) = createImage(
+      width, height, texture.mip_levels, vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
+      vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst
+        | vk::ImageUsageFlagBits::eSampled,
+      vk::MemoryPropertyFlagBits::eDeviceLocal);
     // Transition the texture image to VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
     transitionImageLayout(texture.image, vk::Format::eR8G8B8A8Unorm, vk::ImageLayout::eUndefined,
-                          vk::ImageLayout::eTransferDstOptimal);
+                          vk::ImageLayout::eTransferDstOptimal, texture.mip_levels);
     // Execute the buffer to image copy operation
     copyBufferToImage(stagingbuffer, texture.image, width, height);
-    // To be able to start sampling from the texture image in the shader, we need one last
-    // transition to prepare it for shader access
-    transitionImageLayout(texture.image, vk::Format::eR8G8B8A8Unorm,
-                          vk::ImageLayout::eTransferDstOptimal,
-                          vk::ImageLayout::eShaderReadOnlyOptimal);
 
     m_device.destroyBuffer(stagingbuffer, nullptr);
     m_device.freeMemory(stagingbuffermemory, nullptr);
+
+    generateMipmaps(texture.image, vk::Format::eR8G8B8A8Unorm, width, height, texture.mip_levels);
 }
 
 void
 renderer::createTextureImageView(Texture& texture)
 {
-    texture.image_view =
-      createImageView(texture.image, vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor);
+    texture.image_view = createImageView(texture.image, vk::Format::eR8G8B8A8Unorm,
+                                         vk::ImageAspectFlagBits::eColor, texture.mip_levels);
 }
 
 void
@@ -2816,15 +2813,15 @@ renderer::createDepthResources()
     vk::Format depthFormat = findDepthFormat();
 
     std::tie(m_offscreen_framebuffer.depth.image, m_offscreen_framebuffer.depth.memory) =
-      createImage(m_swapchain_struct.width, m_swapchain_struct.height, depthFormat,
+      createImage(m_swapchain_struct.width, m_swapchain_struct.height, 1, depthFormat,
                   vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment,
                   vk::MemoryPropertyFlagBits::eDeviceLocal);
     m_offscreen_framebuffer.depth.image_view = createImageView(
-      m_offscreen_framebuffer.depth.image, depthFormat, vk::ImageAspectFlagBits::eDepth);
+      m_offscreen_framebuffer.depth.image, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
 
     transitionImageLayout(m_offscreen_framebuffer.depth.image, depthFormat,
                           vk::ImageLayout::eUndefined,
-                          vk::ImageLayout::eDepthStencilAttachmentOptimal);
+                          vk::ImageLayout::eDepthStencilAttachmentOptimal, 1);
 }
 
 
@@ -3245,6 +3242,7 @@ renderer::createBuffer(vk::DeviceSize          size,
 std::pair<vk::Image, vk::DeviceMemory>
 renderer::createImage(uint32_t                width,
                       uint32_t                height,
+                      uint32_t                mipLevels,
                       vk::Format              format,
                       vk::ImageTiling         tiling,
                       vk::ImageUsageFlags     usage,
@@ -3262,7 +3260,7 @@ renderer::createImage(uint32_t                width,
         //  The extent field specifies the dimensions of the image, basically how many texels
         //  there are on each axis. That's why depth must be 1 instead of 0
         .setExtent(vk::Extent3D(width, height, 1))
-        .setMipLevels(1)
+        .setMipLevels(mipLevels)
         .setArrayLayers(1)
         // Vulkan supports many possible image formats, but we should use the same format for
         // the texels as the pixels in the buffer, otherwise the copy operation will fail.
@@ -3379,7 +3377,8 @@ void
 renderer::transitionImageLayout(vk::Image       image,
                                 vk::Format      format,
                                 vk::ImageLayout oldLayout,
-                                vk::ImageLayout newLayout) const
+                                vk::ImageLayout newLayout,
+                                uint32_t        mipLevels) const
 {
     if (!image) {
         return;
@@ -3421,7 +3420,7 @@ renderer::transitionImageLayout(vk::Image       image,
             barrier.subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
         }
         barrier.subresourceRange.setBaseMipLevel(0)
-          .setLevelCount(1)
+          .setLevelCount(mipLevels)
           .setBaseArrayLayer(0)
           .setLayerCount(1);
 
@@ -3472,7 +3471,8 @@ renderer::transitionImageLayout(vk::Image       image,
 vk::ImageView
 renderer::createImageView(vk::Image               image,
                           vk::Format              format,
-                          vk::ImageAspectFlagBits aspectflags) const
+                          vk::ImageAspectFlagBits aspectflags,
+                          uint32_t                mipLevels) const
 {
     auto createinfo = vk::ImageViewCreateInfo()
                         .setImage(image)
@@ -3486,7 +3486,7 @@ renderer::createImageView(vk::Image               image,
                         .setSubresourceRange(vk::ImageSubresourceRange()
                                                .setAspectMask(aspectflags)
                                                .setBaseMipLevel(0)
-                                               .setLevelCount(1)
+                                               .setLevelCount(mipLevels)
                                                .setBaseArrayLayer(0)
                                                .setLayerCount(1));
 
@@ -3548,6 +3548,73 @@ renderer::createAttachment(vk::Format             format,
       .setLayerCount(1);
 
     m_device.createImageView(&imageView, nullptr, &attachment->image_view);
+}
+
+void
+renderer::generateMipmaps(vk::Image  image,
+                          vk::Format imageFormat,
+                          int32_t    tex_width,
+                          int32_t    tex_height,
+                          uint32_t   mipLevels)
+{
+    executeSingleTimeCommands([=](vk::CommandBuffer commandBuffer) {
+        auto barrier = vk::ImageMemoryBarrier()
+                         .setImage(image)
+                         .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                         .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+        barrier.subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor)
+          .setBaseArrayLayer(0)
+          .setLayerCount(1)
+          .setLevelCount(1);
+
+        int32_t mipWidth  = tex_width;
+        int32_t mipHeight = tex_height;
+
+        for (uint32_t i = 1; i < mipLevels; ++i) {
+            barrier.subresourceRange.setBaseMipLevel(i - 1);
+            barrier.setOldLayout(vk::ImageLayout::eTransferDstOptimal)
+              .setNewLayout(vk::ImageLayout::eTransferSrcOptimal)
+              .setSrcAccessMask(vk::AccessFlagBits::eTransferWrite)
+              .setDstAccessMask(vk::AccessFlagBits::eTransferRead);
+
+            commandBuffer.pipelineBarrier(
+              vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer,
+              vk::DependencyFlagBits::eByRegion, 0, nullptr, 0, nullptr, 1, &barrier);
+
+            auto blit          = vk::ImageBlit();
+            blit.srcOffsets[0] = { 0, 0, 0 };
+            blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
+            blit.srcSubresource.setAspectMask(vk::ImageAspectFlagBits::eColor)
+              .setMipLevel(i - 1)
+              .setBaseArrayLayer(0)
+              .setLayerCount(1);
+            blit.dstOffsets[0] = { 0, 0, 0 };
+            blit.dstOffsets[1] = { mipWidth > 1 ? mipWidth / 2 : 1,
+                                   mipHeight > 1 ? mipHeight / 2 : 1, 1 };
+            blit.dstSubresource.setAspectMask(vk::ImageAspectFlagBits::eColor)
+              .setMipLevel(i)
+              .setBaseArrayLayer(0)
+              .setLayerCount(1);
+
+            commandBuffer.blitImage(image, vk::ImageLayout::eTransferSrcOptimal, image,
+                                    vk::ImageLayout::eTransferDstOptimal, 1, &blit,
+                                    vk::Filter::eLinear);
+
+            barrier.setOldLayout(vk::ImageLayout::eTransferSrcOptimal)
+              .setNewLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
+              .setSrcAccessMask(vk::AccessFlagBits::eTransferRead)
+              .setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+
+            commandBuffer.pipelineBarrier(
+              vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader,
+              vk::DependencyFlagBits::eByRegion, 0, nullptr, 0, nullptr, 1, &barrier);
+
+            if (mipWidth > 1)
+                mipWidth /= 2;
+            if (mipHeight > 1)
+                mipHeight /= 2;
+        }
+    });
 }
 
 /* This function allows us to define our own list of prioritized formats, and will return the

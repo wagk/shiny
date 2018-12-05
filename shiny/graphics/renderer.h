@@ -267,6 +267,7 @@ private:
 
     std::pair<vk::Image, vk::DeviceMemory> createImage(uint32_t                width,
                                                        uint32_t                height,
+                                                       uint32_t                mipLevels,
                                                        vk::Format              format,
                                                        vk::ImageTiling         tiling,
                                                        vk::ImageUsageFlags     usage,
@@ -277,15 +278,23 @@ private:
     void transitionImageLayout(vk::Image       image,
                                vk::Format      format,
                                vk::ImageLayout oldLayout,
-                               vk::ImageLayout newLayout) const;
+                               vk::ImageLayout newLayout,
+                               uint32_t        mipLevels) const;
 
     vk::ImageView createImageView(vk::Image               image,
                                   vk::Format              format,
-                                  vk::ImageAspectFlagBits aspectflags) const;
+                                  vk::ImageAspectFlagBits aspectflags,
+                                  uint32_t                mipLevels) const;
 
     void createAttachment(vk::Format             format,
                           vk::ImageUsageFlagBits usage,
                           FrameBufferAttachment* attachment);
+
+    void generateMipmaps(vk::Image  image,
+                         vk::Format imageFormat,
+                         int32_t    tex_width,
+                         int32_t    tex_height,
+                         uint32_t   mipLevels);
 
     /* Find Format Helper Functions: Put them here due to their need for device reference */
     vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates,
