@@ -8,6 +8,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include "graphics/texture.h"
+#include "vulkanbase/camera.hpp"
 
 
 namespace shiny::graphics {
@@ -41,18 +42,22 @@ struct Light
 
 struct UniformBuffers
 {
-    vk::Buffer               vsFullScreen;
-    vk::Buffer               vsOffScreen;
-    vk::Buffer               fsLights;
-    vk::DeviceMemory         vsFullScreen_mem;
-    vk::DeviceMemory         vsOffScreen_mem;
-    vk::DeviceMemory         fsLights_mem;
+    vk::Buffer vsFullScreen;
+    vk::Buffer vsOffScreen;
+    vk::Buffer fsLights;
+    // vk::Buffer               camera;
+    vk::DeviceMemory vsFullScreen_mem;
+    vk::DeviceMemory vsOffScreen_mem;
+    vk::DeviceMemory fsLights_mem;
+    // vk::DeviceMemory         camera_mem;
     vk::DescriptorBufferInfo vsFullscreen_des;
     vk::DescriptorBufferInfo vsOffscreen_des;
     vk::DescriptorBufferInfo fsLights_des;
-    void*                    vsFullScreen_map;
-    void*                    vsOffScreen_map;
-    void*                    fsLights_map;
+    // vk::DescriptorBufferInfo camera_des;
+    void* vsFullScreen_map;
+    void* vsOffScreen_map;
+    void* fsLights_map;
+    // void*                    camera_map;
 };
 
 struct Vertex
@@ -410,13 +415,14 @@ private:
     // Mesh m_mesh;
 
     // Asset Caches. TODO: use maps instead of a vector of meshes
-    uniformbufferobject m_camera;
-    UniformBuffers      m_uniform_buffers;
-    FrameBuffer         m_offscreen_framebuffer;
-    Mesh                m_offscreen_quads;
-    vk::CommandBuffer   m_offscreen_commandbuffer;
-    std::vector<Mesh>   m_meshes;
-    vk::Sampler         m_color_sampler;
+    // uniformbufferobject m_camera;
+    Camera            m_camera;
+    UniformBuffers    m_uniform_buffers;
+    FrameBuffer       m_offscreen_framebuffer;
+    Mesh              m_offscreen_quads;
+    vk::CommandBuffer m_offscreen_commandbuffer;
+    std::vector<Mesh> m_meshes;
+    vk::Sampler       m_color_sampler;
 
     // NOTE: These are temporarily here until I do it my way.
     struct

@@ -362,6 +362,7 @@ glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders
     <ClInclude Include="include\glm\vector_relational.hpp" />
     <ClInclude Include="include\stb_image.h" />
     <ClInclude Include="include\tiny_obj_loader.h" />
+    <ClInclude Include="vulkanbase\camera.hpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="include\glm\detail\func_common.inl" />

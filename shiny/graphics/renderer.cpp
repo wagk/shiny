@@ -107,22 +107,6 @@ const std::vector<VulkanExtensionName> deviceExtensions = { VK_KHR_SWAPCHAIN_EXT
 
 const std::array<float, 4> backgroundColor = { 0.033f, 0.111f, 0.124f, 1.0f };
 
-// const std::vector<shiny::graphics::Vertex> triangle_vertices = {
-//    { { -0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f } },
-//    { { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 0.0f } },
-//    { { 0.5f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
-//    { { -0.5f, 0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } },
-//
-//    { { -0.5f, -0.5f, -0.5f }, { 1.0f, 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f } },
-//    { { 0.5f, -0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 0.0f } },
-//    { { 0.5f, 0.5f, -0.5f }, { 0.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
-//    { { -0.5f, 0.5f, -0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } }
-//};
-//
-// const std::vector<uint32_t> triangle_indices = { 0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4 };
-//
-// const shiny::graphics::Mesh triangle_mesh(triangle_vertices, triangle_indices);
-
 const std::vector<std::string> all_model_filenames = { "models/imrodnew.fbx" };
 // const std::vector<std::string> all_model_filenames = { "models/singleCubeSelection.fbx" };
 //"models/singleCubeSelection.fbx" };
@@ -1904,6 +1888,8 @@ renderer::buildCommandBuffers()
                   if (debugDisplay) {
                       command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
                                                   m_graphics_pipelines.debug);
+                      command_buffer.bindVertexBuffers(0, 1, &m_offscreen_quads.vertex_buffer,
+                                                       offsets);
                       command_buffer.bindIndexBuffer(m_offscreen_quads.index_buffer, 0,
                                                      vk::IndexType::eUint32);
                       command_buffer.drawIndexed(m_offscreen_quads.num_indices, 1, 0, 0, 1);
@@ -2311,6 +2297,10 @@ renderer::prepareUniformBuffers()
     // helper function is simply because the uniform buffers
     // here are not full on meshes.
 
+    // Camera
+    /*std::tie(m_uniform_buffers.camera, m_uniform_buffers.camera_mem) = createBuffer(
+      sizeof(uniformbufferobject), vk::BufferUsageFlagBits::eUniformBuffer,
+      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);*/
     // Fullscreen vertex shader
     std::tie(m_uniform_buffers.vsFullScreen, m_uniform_buffers.vsFullScreen_mem) = createBuffer(
       sizeof(uboVS), vk::BufferUsageFlagBits::eUniformBuffer,
@@ -2325,6 +2315,8 @@ renderer::prepareUniformBuffers()
       vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
     // Maybe need to call mapmemory
+    /*m_uniform_buffers.camera_map =
+      m_device.mapMemory(m_uniform_buffers.camera_mem, 0, sizeof(uniformbufferobject));*/
     m_uniform_buffers.vsFullScreen_map =
       m_device.mapMemory(m_uniform_buffers.vsFullScreen_mem, 0, sizeof(uboVS));
     m_uniform_buffers.vsOffScreen_map =
@@ -2490,17 +2482,27 @@ renderer::createDescriptorSet()
         std::runtime_error("Error allocating descriptor sets!\n");
     }
 
-    // Buffer descriptor for offscreen quad
+    // Uniform Buffer descriptors
     m_uniform_buffers.vsFullscreen_des = vk::DescriptorBufferInfo()
-                                           .setBuffer(m_offscreen_quads.uniform_buffer)
+                                           //.setBuffer(m_offscreen_quads.uniform_buffer)
+                                           .setBuffer(m_uniform_buffers.vsFullScreen)
                                            .setOffset(0)
                                            .setRange(sizeof(uboVS));
 
+    m_uniform_buffers.vsOffscreen_des = vk::DescriptorBufferInfo()
+                                          .setBuffer(m_uniform_buffers.vsOffScreen)
+                                          .setOffset(0)
+                                          .setRange(sizeof(uboOffscreenVS));
 
     m_uniform_buffers.fsLights_des = vk::DescriptorBufferInfo()
                                        .setBuffer(m_uniform_buffers.fsLights)
                                        .setOffset(0)
                                        .setRange(sizeof(uboFragmentLights));
+
+    /*m_uniform_buffers.camera_des = vk::DescriptorBufferInfo()
+                                     .setBuffer(m_uniform_buffers.camera)
+                                     .setOffset(0)
+                                     .setRange(sizeof(uniformbufferobject));*/
 
     // Image descriptors for the offscreen color attachments
     auto texDescriptorPosition = vk::DescriptorImageInfo()
@@ -2610,11 +2612,6 @@ m_device.updateDescriptorSets(static_cast<uint32_t>(ddescriptorWrites.size()),
                              .setBuffer(mesh.uniform_buffer)
                              .setOffset(0)
                              .setRange(sizeof(uboOffscreenVS));
-
-        m_uniform_buffers.vsOffscreen_des = vk::DescriptorBufferInfo()
-                                              .setBuffer(m_uniform_buffers.vsOffScreen)
-                                              .setOffset(0)
-                                              .setRange(sizeof(uboOffscreenVS));
 
         mesh.diffuse_tex.descriptor = vk::DescriptorImageInfo()
                                         .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
@@ -2849,20 +2846,23 @@ renderer::updateUniformBuffer()
     float time =
       std::chrono::duration<float, std::chrono::seconds::period>(current_t - start_t).count();
 
+    // m_camera.rotate(glm::vec3(0.f, 5.f, 0.f));
+
     // uniformbufferobject ubo;
     // m_camera.model = glm::mat4(1.0f);
-    m_camera.model =
-      glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f, 0.f));
-    m_camera.view =
-      glm::lookAt(glm::vec3(0.f, 2.f, 7.5f), glm::vec3(0.f, 2.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
-    m_camera.proj =
-      glm::perspective(glm::radians(45.0f), (float)m_win_width / (float)m_win_height, 0.1f, 100.0f);
+    /*m_camera.model =
+      glm::rotate(glm::mat4(1.f), time * glm::radians(15.f), glm::vec3(0.f, 1.f, 0.f));*/
+    /*m_camera.matrices.view =
+      glm::lookAt(m_camera.position, glm::vec3(0.f, 2.f, 0.f), glm::vec3(0.f, 1.f, 0.f));*/
+    /*m_camera.matrices.perspective =
+      glm::perspective(glm::radians(45.0f), (float)m_win_width / (float)m_win_height, 0.1f,
+      100.0f);*/
 
     // GLM was originally designed for OpenGL, where the Y coordinate of the clip coordinates is
     // inverted. The easiest way to compensate for that is to flip the sign on the scaling factor of
     // the Y axis in the projection matrix. If you don't do this, then the image will be rendered
     // upside down.
-    m_camera.proj[1][1] *= -1;
+    // m_camera.matrices.perspective[1][1] *= -1;
 
     // Until I figure out how to map a uniform buffer for the camera, this will just remain
     // commented out
@@ -2905,10 +2905,9 @@ void
 renderer::updateUniformBufferDeferredMatrices()
 {
 
-    uboOffscreenVS.projection = m_camera.proj;
-    uboOffscreenVS.view       = m_camera.view;
-    uboOffscreenVS.model      = m_camera.model;
-    // uboOffscreenVS.model = glm::mat4(1.0f);
+    uboOffscreenVS.projection = m_camera.matrices.perspective;
+    uboOffscreenVS.view       = m_camera.matrices.view;
+    uboOffscreenVS.model      = glm::mat4(1.0f);
 
     withMappedMemory(m_uniform_buffers.vsOffScreen_mem, 0, sizeof(uboOffscreenVS), [=](void* data) {
         std::memcpy(data, &uboOffscreenVS, sizeof(uboOffscreenVS));
@@ -2944,13 +2943,8 @@ renderer::updateUniformBufferDeferredLights()
     uboFragmentLights.lights[5].radius   = 25.0f;
 
     // Current view position
-    // glm::vec4 camPos = glm::vec4(m_camera.)
-    // Temporarily hard code the camera position
-    // uboFragmentLights.viewPos = glm::vec4(0.f, 2.f, 7.5f, 0.f);
-    glm::mat4 worldMat        = m_camera.model * m_camera.view;
-    glm::vec4 translation     = worldMat[3];
-    translation.w             = 0.0f;
-    uboFragmentLights.viewPos = translation * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);
+    uboFragmentLights.viewPos =
+      glm::vec4(m_camera.position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);
 
     withMappedMemory(m_uniform_buffers.fsLights_mem, 0, sizeof(uboFragmentLights), [=](void* data) {
         std::memcpy(data, &uboFragmentLights, sizeof(uboFragmentLights));
@@ -2962,13 +2956,16 @@ void
 renderer::loadAssets()
 {
     // TEMPORARY: Camera settings here
-    m_camera.model;
+    m_camera.setPosition(glm::vec3(2.15f, 0.3f, 8.75f));
+    m_camera.setRotation(glm::vec3(-0.75f, 12.5f, 0.0f));
+    m_camera.setPerspective(60.0f, (float)m_win_width / (float)m_win_height, 0.1f, 256.0f);
+    // m_camera.model;
     // m_camera.view = glm::ortho(-4.0f / 3.0f, 4.0f / 3.0f, -1.0f, 1.0f, -1.0f, 1.0f);
-    m_camera.view =
-      glm::lookAt(glm::vec3(0.f, 2.f, 7.5f), glm::vec3(0.f, 2.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
-    m_camera.proj =
+    m_camera.matrices.view =
+      glm::lookAt(m_camera.position, glm::vec3(0.f, 2.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
+    /*m_camera.proj =
       glm::perspective(glm::radians(60.0f), m_win_width / (float)m_win_height, 0.1f, 100.0f);
-    m_camera.proj[1][1] *= -1;
+    m_camera.proj[1][1] *= -1;*/
 
     // Load models and Textures
     loadModels(all_model_filenames);
@@ -3804,9 +3801,9 @@ renderer::mainLoop()
     while (!glfwWindowShouldClose(m_window)) {
         glfwPollEvents();
         drawFrame();
-        updateUniformBuffer();
+        // updateUniformBuffer();
         // updateUniformBuffersScreen();
-        updateUniformBufferDeferredMatrices();
+        // updateUniformBufferDeferredMatrices();
         updateUniformBufferDeferredLights();
     }
 

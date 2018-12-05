@@ -76,5 +76,5 @@ void main()
   // Debug visualizations
   //outFragcolor = vec4(inUV.x, inUV.y, 0.0 , 1.0);
   //outFragcolor = vec4(fragPos, 1.0);
-  outFragcolor = vec4(albedo.rgb, 1.0);
+  outFragcolor = texture(samplerAlbedo, inUV);
 }

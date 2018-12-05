@@ -44,12 +44,13 @@ void main()
 	outWorldPos.y = -outWorldPos.y;
 	
 	// Normal in world space
-	mat3 mNormal = transpose(inverse(mat3(ubo.view * ubo.model)));
-	// mat3 mNormal = inverse(mat3(ubo.model));
-	// outNormal = mat3(ubo.view * ubo.model) * inNormal;
-	// outTangent = mat3(ubo.view * ubo.model) * inTangent;
-	outNormal = mNormal * normalize(inNormal);
-	outTangent = mNormal * normalize(inTangent);
+	//mat3 mNormal = transpose(inverse(mat3(ubo.view * ubo.model)));
+	//mat3 mNormal = transpose(inverse(mat3(ubo.model)));
+	mat3 mNormal = inverse(mat3(ubo.view * ubo.model));
+	//outNormal = mNormal * normalize(inNormal);
+	//outTangent = mNormal * normalize(inTangent);
+	outNormal = mat3(ubo.view * ubo.model) * normalize(inNormal);
+	outTangent = mat3(ubo.view * ubo.model) * normalize(inTangent);
 	
 	// Currently just vertex color
 	outColor = inColor;
