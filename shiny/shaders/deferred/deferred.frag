@@ -48,7 +48,7 @@ void main()
 		vec3 V = ubo.viewPos.xyz - fragPos;
 		V = normalize(V);
 		
-		//if(dist < ubo.lights[i].radius)
+		if(dist < ubo.lights[i].radius)
 		{
 			// Light to fragment
 			L = normalize(L);
@@ -71,7 +71,7 @@ void main()
 		}	
 	}    	
    
-  outFragcolor = vec4(fragcolor * 1.3, 1.0);
+  outFragcolor = vec4(fragcolor, 1.0);
 
   // Debug visualizations
   // Flat Color
@@ -81,11 +81,19 @@ void main()
   //outFragcolor = vec4(inUV.x, inUV.y, 0.0 , 1.0);
 
   // Position G-Buffer Value
-  //outFragcolor = vec4(fragPos, 0.5);
+  //outFragcolor = vec4(fragPos, 1.0);
 
   // Normal G-Buffer Value
   //outFragcolor = vec4(normal, 1.0);
 
   // Albedo G-Buffer Value
-  //outFragcolor = vec4(albedo.rgb, 1.0);
+  if(isnan(albedo.r) || isnan(albedo.g) || isnan(albedo.b)
+   || isinf(albedo.r) || isinf(albedo.g) || isinf(albedo.b))
+  {
+	//outFragcolor = vec4(1.0, 0.0, 0.0, 1.0);
+  }
+  else
+  {
+	//outFragcolor = vec4(albedo.rgb, 1.0);
+  }
 }

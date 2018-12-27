@@ -190,6 +190,10 @@ private:
     void mainLoop();
     void cleanup();
 
+    // GLFW callbacks
+
+
+    // Graphics functions
     void prepareFrame();
     void submitFrame();
 

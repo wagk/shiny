@@ -1609,6 +1609,8 @@ renderer::createFramebuffers()
             throw std::runtime_error("failed to create framebuffer!");
         }
         m_framebuffers[i] = framebuffer;
+        std::cout << "FrameBuffer[" << i << "] created: address is " << &m_framebuffers[i]
+                  << std::endl;
     }
     std::cout << "Swapchain Framebuffers created!\n";
 }
@@ -2178,7 +2180,7 @@ renderer::prepareOffscreenFramebuffer()
     for (uint32_t i = 0; i < 4; ++i) {
         attachmentDescriptions[i].samples        = vk::SampleCountFlagBits::e1;
         attachmentDescriptions[i].loadOp         = vk::AttachmentLoadOp::eClear;
-        attachmentDescriptions[i].storeOp        = vk::AttachmentStoreOp::eDontCare;
+        attachmentDescriptions[i].storeOp        = vk::AttachmentStoreOp::eStore;
         attachmentDescriptions[i].stencilLoadOp  = vk::AttachmentLoadOp::eDontCare;
         attachmentDescriptions[i].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
         attachmentDescriptions[i].initialLayout  = vk::ImageLayout::eUndefined;
@@ -2264,6 +2266,8 @@ renderer::prepareOffscreenFramebuffer()
     if (!(m_offscreen_framebuffer.frameBuffer = m_device.createFramebuffer(fbufCreateInfo))) {
         std::runtime_error("Error creating Offscreen Render Pass!\n");
     }
+    std::cout << "Offscreen FrameBuffer created: " << &m_offscreen_framebuffer.frameBuffer
+              << std::endl;
 
     // Create Sampler to sample from the color attachments
     vk::SamplerCreateInfo sampler = vk::SamplerCreateInfo();
@@ -2283,7 +2287,7 @@ renderer::prepareOffscreenFramebuffer()
     if (!(m_color_sampler = m_device.createSampler(sampler))) {
         std::runtime_error("Error creating Offscreen Render Pass!\n");
     }
-    std::cout << "Offscreen Framebuffers created!\n";
+    std::cout << "Offscreen Framebuffer created!\n";
 }
 
 void
@@ -2844,7 +2848,21 @@ renderer::updateUniformBuffer()
     float time =
       std::chrono::duration<float, std::chrono::seconds::period>(current_t - start_t).count();
 
-    // m_camera.rotate(glm::vec3(0.f, 5.f, 0.f));
+    // auto rotAngle = time * glm::radians(2.f);
+    auto rotAngle = glm::radians(0.2f);
+    m_camera.rotate(glm::vec3(0.f, rotAngle, 0.f));
+
+    auto currPos = m_camera.position;
+    currPos.y    = 0.f;
+    auto radius  = currPos.length();
+
+    auto newPos = glm::highp_vec3(glm::cos(m_camera.rotation.y) * radius, currPos.y,
+                                  glm::sin(m_camera.rotation.y) * radius);
+
+    // std::cout << "New Position: " << newPos.x << " " << newPos.y << " " << newPos.z << std::endl;
+    m_camera.setPosition(newPos);
+    m_camera.matrices.view =
+      glm::lookAt(m_camera.position, glm::vec3(0.f, 1.f, 0.f), glm::vec3(0.f, -1.f, 0.f));
 
     // uniformbufferobject ubo;
     // m_camera.model = glm::mat4(1.0f);
@@ -2954,14 +2972,16 @@ void
 renderer::loadAssets()
 {
     // TEMPORARY: Camera settings here
-    m_camera.setPosition(glm::vec3(2.3f, 2.0f, 4.3f));
-    m_camera.setRotation(glm::vec3(-0.75f, 12.5f, 0.0f));
+    m_camera.setPosition(glm::vec3(0.f, 1.0f, 5.f));  // Straight ahead view
+    // m_camera.setPosition(glm::vec3(2.3f, 2.0f, 4.3f));  // 3/4 view
+    // m_camera.setRotation(glm::vec3(-0.75f, 12.5f, 0.0f));
     m_camera.setPerspective(60.0f, (float)m_win_width / (float)m_win_height, 0.1f, 256.0f);
     // m_camera.model;
-    // m_camera.view = glm::ortho(-4.0f / 3.0f, 4.0f / 3.0f, -1.0f, 1.0f, -1.0f, 1.0f);
+    // m_camera.matrices.view = glm::ortho(-4.0f / 3.0f, 4.0f / 3.0f, -1.0f, 1.0f, -100.0f, 100.0f);
     m_camera.matrices.view =
-      glm::lookAt(m_camera.position, glm::vec3(0.f, 1.f, 0.f), glm::vec3(0.f, -1.f, 0.f));
-    // m_camera.matrices.perspective[1][1] *= -1;
+      glm::lookAt(m_camera.position, glm::vec3(0.f, 1.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
+    m_camera.matrices.perspective[0][0] *= -1;
+    m_camera.matrices.perspective[1][1] *= -1;
     /*m_camera.proj =
       glm::perspective(glm::radians(60.0f), m_win_width / (float)m_win_height, 0.1f, 100.0f);
     m_camera.proj[1][1] *= -1;*/
@@ -3873,7 +3893,7 @@ renderer::mainLoop()
     while (!glfwWindowShouldClose(m_window)) {
         glfwPollEvents();
         drawFrame();
-        // updateUniformBuffer();
+        updateUniformBuffer();
         // updateUniformBuffersScreen();
         // updateUniformBufferDeferredMatrices();
         updateUniformBufferDeferredLights();
@@ -3969,14 +3989,13 @@ renderer::prepareFrame()
 void
 renderer::submitFrame()
 {
-    std::array<vk::Result, 5> sc_results;
-
+    // std::array<vk::Result, 5> sc_results;
     auto presentInfo = vk::PresentInfoKHR()
                          .setPNext(NULL)
                          .setSwapchainCount(1)
                          .setPSwapchains(&m_swapchain_struct.swapchain)
-                         .setPImageIndices(&m_current_frame)
-                         .setPResults(sc_results.data());
+                         .setPImageIndices(&m_current_frame);
+    //.setPResults(sc_results.data());
 
     // Check if a wait semaphore has been specified to wait for before presenting the image
     if (m_render_complete) {
