@@ -2848,21 +2848,21 @@ renderer::updateUniformBuffer()
     float time =
       std::chrono::duration<float, std::chrono::seconds::period>(current_t - start_t).count();
 
+    // @TODO Change this from automatic turntable to input based rotation
     // auto rotAngle = time * glm::radians(2.f);
-    auto rotAngle = glm::radians(0.2f);
+    auto rotAngle = glm::radians(0.03f);  // *(time / 1000);
     m_camera.rotate(glm::vec3(0.f, rotAngle, 0.f));
+    float c = glm::cos(rotAngle);
+    float s = glm::sin(rotAngle);
 
-    auto currPos = m_camera.position;
-    currPos.y    = 0.f;
-    auto radius  = currPos.length();
-
-    auto newPos = glm::highp_vec3(glm::cos(m_camera.rotation.y) * radius, currPos.y,
-                                  glm::sin(m_camera.rotation.y) * radius);
-
+    // Rotate camera about the origin (zero, zero, zero)
+    auto newPos = m_camera.position;
+    newPos.x    = (m_camera.position.x * c) - (m_camera.position.z * s);
+    newPos.z    = (m_camera.position.x * s) + (m_camera.position.z * c);
     // std::cout << "New Position: " << newPos.x << " " << newPos.y << " " << newPos.z << std::endl;
     m_camera.setPosition(newPos);
     m_camera.matrices.view =
-      glm::lookAt(m_camera.position, glm::vec3(0.f, 1.f, 0.f), glm::vec3(0.f, -1.f, 0.f));
+      glm::lookAt(m_camera.position, glm::vec3(0.f, 1.5f, 0.f), glm::vec3(0.f, 1.f, 0.f));
 
     // uniformbufferobject ubo;
     // m_camera.model = glm::mat4(1.0f);
@@ -2959,8 +2959,8 @@ renderer::updateUniformBufferDeferredLights()
     uboFragmentLights.lights[5].radius   = 25.0f;
 
     // Current view position
-    uboFragmentLights.viewPos =
-      glm::vec4(m_camera.position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);
+    // uboFragmentLights.viewPos =
+    //  glm::vec4(m_camera.position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);
 
     withMappedMemory(m_uniform_buffers.fsLights_mem, 0, sizeof(uboFragmentLights), [=](void* data) {
         std::memcpy(data, &uboFragmentLights, sizeof(uboFragmentLights));
@@ -2972,19 +2972,22 @@ void
 renderer::loadAssets()
 {
     // TEMPORARY: Camera settings here
-    m_camera.setPosition(glm::vec3(0.f, 1.0f, 5.f));  // Straight ahead view
-    // m_camera.setPosition(glm::vec3(2.3f, 2.0f, 4.3f));  // 3/4 view
-    // m_camera.setRotation(glm::vec3(-0.75f, 12.5f, 0.0f));
+    // m_camera.setPosition(glm::vec3(0.f, 1.0f, 5.f));  // Straight ahead view
+    m_camera.setPosition(glm::vec3(4.f, 3.0f, 5.3f));  // 3/4 view
     m_camera.setPerspective(60.0f, (float)m_win_width / (float)m_win_height, 0.1f, 256.0f);
+    m_camera.matrices.perspective[0][0] *= -1;
+    m_camera.matrices.perspective[1][1] *= -1;
     // m_camera.model;
     // m_camera.matrices.view = glm::ortho(-4.0f / 3.0f, 4.0f / 3.0f, -1.0f, 1.0f, -100.0f, 100.0f);
     m_camera.matrices.view =
-      glm::lookAt(m_camera.position, glm::vec3(0.f, 1.f, 0.f), glm::vec3(0.f, 1.f, 0.f));
-    m_camera.matrices.perspective[0][0] *= -1;
-    m_camera.matrices.perspective[1][1] *= -1;
+      glm::lookAt(m_camera.position, glm::vec3(0.f, 1.5f, 0.f), glm::vec3(0.f, 1.f, 0.f));
     /*m_camera.proj =
       glm::perspective(glm::radians(60.0f), m_win_width / (float)m_win_height, 0.1f, 100.0f);
     m_camera.proj[1][1] *= -1;*/
+
+    // Set Lights once at the start
+    uboFragmentLights.viewPos =
+      glm::vec4(m_camera.position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);
 
     // Load models and Textures
     loadModels(all_model_filenames);
@@ -3895,7 +3898,7 @@ renderer::mainLoop()
         drawFrame();
         updateUniformBuffer();
         // updateUniformBuffersScreen();
-        // updateUniformBufferDeferredMatrices();
+        updateUniformBufferDeferredMatrices();
         updateUniformBufferDeferredLights();
     }
 

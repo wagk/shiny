@@ -32,7 +32,7 @@ void main()
 	vec4 albedo = texture(samplerAlbedo, inUV);
 	
 	#define lightCount 6
-	#define ambient 0.0
+	#define ambient 0.1
 	
 	// Ambient part
 	vec3 fragcolor  = albedo.rgb * ambient;

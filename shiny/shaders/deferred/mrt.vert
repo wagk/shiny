@@ -39,7 +39,7 @@ void main()
 	// Vertex position in world space
 	outWorldPos = (ubo.view * ubo.model * tmpPos).xyz;
 	// GL to Vulkan coord space
-	outWorldPos.y = -outWorldPos.y;
+	//outWorldPos.y = -outWorldPos.y;
 	
 	// Normal and Tangent in world space
 	//mat3 mNormal = transpose(inverse(mat3(ubo.view * ubo.model)));
