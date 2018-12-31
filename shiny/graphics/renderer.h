@@ -11,7 +11,7 @@
 #include "vulkanbase/camera.hpp"
 
 
-namespace shiny::graphics {
+namespace shiny {
 
 using spirvbytecode = std::vector<char>;
 
@@ -20,6 +20,7 @@ We can exactly match the definition in the shader using data types in GLM. The d
 is binary compatible with the way the shader expects it, so we can later just memcpy a
 UniformBufferObject to a VkBuffer.
 */
+#pragma region graphics_structs
 struct uniformbufferobject
 {
     glm::mat4 model;
@@ -31,8 +32,7 @@ struct uniformbufferobject
                                glm::vec4(1.0f, -5.0f, 2.0f, 1.0f) };*/
 };
 
-// NOTE: These are borrowed from Sascha. I will need to rearrange to my own liking.
-
+// NOTE: These are borrowed from Sascha. I might need to rearrange to my own liking.
 struct Light
 {
     glm::vec4 position;
@@ -172,6 +172,7 @@ struct PipelineLayouts
     vk::PipelineLayout offscreen;
 };
 
+#pragma endregion graphics_structs
 
 class renderer
 {
@@ -383,8 +384,8 @@ private:
 
     // TODO: These are hardcoded variables that should exist in an asset cache.
     // Like m_shader_cache or something. Move these there.
-    vk::ShaderModule              m_vertex_shader_module;
-    vk::ShaderModule              m_fragment_shader_module;
+    // vk::ShaderModule              m_vertex_shader_module;
+    // vk::ShaderModule              m_fragment_shader_module;
     std::vector<vk::ShaderModule> m_shader_modules;
 
     vk::DescriptorPool      m_descriptor_pool;
@@ -510,4 +511,4 @@ recordCommandBufferRenderPass(vk::CommandBuffer              buffer,
     buffer.endRenderPass();
 }
 
-}  // namespace shiny::graphics
+}  // namespace shiny

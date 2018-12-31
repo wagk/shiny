@@ -460,7 +460,7 @@ an std::vector where the default allocator already ensures that the data satisfi
 alignment requirements.
 */
 vk::ShaderModule
-createShaderModule(const shiny::graphics::spirvbytecode& code, const vk::Device& device)
+createShaderModule(const shiny::spirvbytecode& code, const vk::Device& device)
 {
     vk::ShaderModuleCreateInfo create_info;
     create_info.setCodeSize(code.size());
@@ -474,7 +474,7 @@ Now that we have a way of producing SPIR-V shaders, it's time to load them into 
 plug them into the graphics pipeline at some point. We'll first write a simple helper function to
 load the binary data from the files.
 */
-shiny::graphics::spirvbytecode
+shiny::spirvbytecode
 readFile(const std::string& filename)
 {
     std::ifstream file(filename, std::ios::binary | std::ios::in | std::ios::ate);
@@ -490,7 +490,7 @@ readFile(const std::string& filename)
     file.read(buffer.data(), filesize);
     file.close();
 
-    return shiny::graphics::spirvbytecode(buffer);
+    return shiny::spirvbytecode(buffer);
 }
 
 using MemoryTypeIndex = uint32_t;
@@ -534,7 +534,7 @@ findMemoryType(const vk::PhysicalDevice& physical_device,
 
 }  // namespace
 
-namespace shiny::graphics {
+namespace shiny {
 
 /*
 A vertex binding describes at which rate to load data from memory throughout the vertices. It
@@ -629,9 +629,9 @@ renderer::getAttributeDescription()
     };
 }
 
-}  // namespace shiny::graphics
+}  // namespace shiny
 
-namespace shiny::graphics {
+namespace shiny {
 
 void
 renderer::run()
@@ -639,6 +639,8 @@ renderer::run()
     initWindow();
     initVulkan();
     prepare();
+    // @TODO: Everything below here should be in an update loop
+    // which will be called by Game Class
     mainLoop();
     cleanup();
 }
@@ -2959,8 +2961,8 @@ renderer::updateUniformBufferDeferredLights()
     uboFragmentLights.lights[5].radius   = 25.0f;
 
     // Current view position
-    // uboFragmentLights.viewPos =
-    //  glm::vec4(m_camera.position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);
+    uboFragmentLights.viewPos =
+      glm::vec4(m_camera.position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);
 
     withMappedMemory(m_uniform_buffers.fsLights_mem, 0, sizeof(uboFragmentLights), [=](void* data) {
         std::memcpy(data, &uboFragmentLights, sizeof(uboFragmentLights));
@@ -3773,41 +3775,58 @@ refer to renderer::recreateSwapChain()
 void
 renderer::cleanupSwapChain()
 {
-    // FrameBuffer
-    m_device.destroyFramebuffer(m_offscreen_framebuffer.frameBuffer);
-    // Depth
-    m_device.destroyImageView(m_offscreen_framebuffer.depth.image_view);
-    m_device.destroyImage(m_offscreen_framebuffer.depth.image);
-    m_device.freeMemory(m_offscreen_framebuffer.depth.memory);
-    // Albedo
-    m_device.destroyImageView(m_offscreen_framebuffer.albedo.image_view);
-    m_device.destroyImage(m_offscreen_framebuffer.albedo.image);
-    m_device.freeMemory(m_offscreen_framebuffer.albedo.memory);
-    // Normal
-    m_device.destroyImageView(m_offscreen_framebuffer.normal.image_view);
-    m_device.destroyImage(m_offscreen_framebuffer.normal.image);
-    m_device.freeMemory(m_offscreen_framebuffer.normal.memory);
-    // Position
-    m_device.destroyImageView(m_offscreen_framebuffer.position.image_view);
-    m_device.destroyImage(m_offscreen_framebuffer.position.image);
-    m_device.freeMemory(m_offscreen_framebuffer.position.memory);
-
-    for (auto& buffer : m_swapchain_struct.buffers) {
-        m_device.destroyImage(buffer.image);
-        m_device.destroyImageView(buffer.view);
+    // Cleanup Swapchain Imageviews
+    if (m_swapchain_struct.swapchain) {
+        for (auto& buffer : m_swapchain_struct.buffers) {
+            m_device.destroyImageView(buffer.view);
+        }
     }
 
-    m_device.freeCommandBuffers(m_command_pool, (uint32_t)m_command_buffers.size(),
-                                m_command_buffers.data());
+    // Cleanup Surface
+    if (m_surface) {
+        m_device.destroySwapchainKHR(m_swapchain_struct.swapchain);
+        m_instance.destroySurfaceKHR(m_surface);
+    }
 
-    m_device.destroyPipelineCache(m_pipeline_cache);
-    m_device.destroyPipeline(m_graphics_pipelines.deferred);
-    m_device.destroyPipeline(m_graphics_pipelines.offscreen);
-    m_device.destroyPipelineLayout(m_pipeline_layouts.deferred);
-    m_device.destroyPipelineLayout(m_pipeline_layouts.offscreen);
-    m_device.destroyRenderPass(m_render_pass);
+    // Set both to VK_NULL_HANDLE
+    // m_surface = VK_NULL_HANDLE;
 
-    m_device.destroySwapchainKHR(m_swapchain_struct.swapchain);
+    /*
+// FrameBuffer
+m_device.destroyFramebuffer(m_offscreen_framebuffer.frameBuffer);
+// Depth
+m_device.destroyImageView(m_offscreen_framebuffer.depth.image_view);
+m_device.destroyImage(m_offscreen_framebuffer.depth.image);
+m_device.freeMemory(m_offscreen_framebuffer.depth.memory);
+// Albedo
+m_device.destroyImageView(m_offscreen_framebuffer.albedo.image_view);
+m_device.destroyImage(m_offscreen_framebuffer.albedo.image);
+m_device.freeMemory(m_offscreen_framebuffer.albedo.memory);
+// Normal
+m_device.destroyImageView(m_offscreen_framebuffer.normal.image_view);
+m_device.destroyImage(m_offscreen_framebuffer.normal.image);
+m_device.freeMemory(m_offscreen_framebuffer.normal.memory);
+// Position
+m_device.destroyImageView(m_offscreen_framebuffer.position.image_view);
+m_device.destroyImage(m_offscreen_framebuffer.position.image);
+m_device.freeMemory(m_offscreen_framebuffer.position.memory);
+
+for (auto& buffer : m_swapchain_struct.buffers) {
+    m_device.destroyImage(buffer.image);
+    m_device.destroyImageView(buffer.view);
+}
+
+m_device.freeCommandBuffers(m_command_pool, (uint32_t)m_command_buffers.size(),
+                            m_command_buffers.data());
+
+m_device.destroyPipelineCache(m_pipeline_cache);
+m_device.destroyPipeline(m_graphics_pipelines.deferred);
+m_device.destroyPipeline(m_graphics_pipelines.offscreen);
+m_device.destroyPipelineLayout(m_pipeline_layouts.deferred);
+m_device.destroyPipelineLayout(m_pipeline_layouts.offscreen);
+m_device.destroyRenderPass(m_render_pass);
+
+m_device.destroySwapchainKHR(m_swapchain_struct.swapchain);*/
 }
 
 vk::Extent2D
@@ -3922,7 +3941,35 @@ renderer::cleanup()
     // Images
     // Memory
 
-    // TODO: Clean up Descriptor Pool
+    // Destroy Descriptor Pool
+    if (m_descriptor_pool) {
+        m_device.destroyDescriptorPool(m_descriptor_pool);
+    }
+
+    // Free Command Buffers
+    m_device.freeCommandBuffers(m_command_pool, static_cast<uint32_t>(m_command_buffers.size()),
+                                m_command_buffers.data());
+
+    // Destroy Renderpass
+    m_device.destroyRenderPass(m_render_pass);
+
+    // Destroy FrameBuffers
+    for (uint32_t i = 0; i < m_framebuffers.size(); ++i) {
+        m_device.destroyFramebuffer(m_framebuffers[i]);
+    }
+
+    // Destroy shader modules
+    for (auto& shaderModule : m_shader_modules) {
+        m_device.destroyShaderModule(shaderModule);
+    }
+
+    // TODO: Destroy Depthstencil
+
+    // Destroy PipelineCache
+    m_device.destroyPipelineCache(m_pipeline_cache);
+
+    // Destroy Command Pool
+    m_device.destroyCommandPool(m_command_pool);
 
     // TODO: Clean up Descriptor Set Layout
 
@@ -3943,7 +3990,6 @@ renderer::cleanup()
         m_device.destroySemaphore(semaphore);
     }
 
-    m_device.destroyDescriptorPool(m_descriptor_pool);
     m_device.destroyDescriptorSetLayout(m_descriptor_set_layout);
 
     for (auto& mesh : m_meshes) {
@@ -3951,14 +3997,7 @@ renderer::cleanup()
     }
 
     // command buffers are implicitly deleted when their command pool is deleted
-    m_device.destroyCommandPool(m_command_pool);
-
-    m_device.destroyShaderModule(m_vertex_shader_module);
-    m_device.destroyShaderModule(m_fragment_shader_module);
-
-    for (auto shadermodule : m_shader_modules) {
-        m_device.destroyShaderModule(shadermodule);
-    }
+    // m_device.destroyCommandPool(m_command_pool);
 
     m_device.destroy();
 
@@ -3968,7 +4007,7 @@ renderer::cleanup()
 
     // vk::surfaceKHR objects do not have a destroy()
     // https://github.com/KhronosGroup/Vulkan-Hpp/issues/204
-    m_instance.destroySurfaceKHR(m_surface);
+    // m_instance.destroySurfaceKHR(m_surface);
     m_instance.destroy();
 
     glfwDestroyWindow(m_window);
@@ -4015,4 +4054,4 @@ renderer::submitFrame()
     m_presentation_queue.waitIdle();
 }
 
-}  // namespace shiny::graphics
+}  // namespace shiny

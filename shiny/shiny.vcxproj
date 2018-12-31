@@ -199,6 +199,7 @@ glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="game\Game.cpp" />
     <ClCompile Include="graphics\renderer.cpp" />
     <ClCompile Include="graphics\texture.cpp" />
     <ClCompile Include="include\glm\detail\glm.cpp" />
@@ -206,6 +207,7 @@ glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders
     <ClCompile Include="stdafx.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="game\Game.h" />
     <ClInclude Include="graphics\renderer.h" />
     <ClInclude Include="graphics\texture.h" />
     <ClInclude Include="Resource.h" />
