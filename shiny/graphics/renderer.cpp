@@ -3927,19 +3927,65 @@ renderer::mainLoop()
 void
 renderer::cleanup()
 {
-    /*for (size_t i = 0; i < max_frames_in_flight; ++i) {
-        m_device.destroySemaphore(m_render_finished_semaphores[i], nullptr);
-        m_device.destroySemaphore(m_image_available_semaphores[i], nullptr);
-        m_device.destroyFence(m_in_flight_fences[i], nullptr);
-    }*/
+    // TODO: Clean up everything else first
+
+    // Samplers
+    m_device.destroySampler(m_color_sampler);
+
+    // Cleanup attachment stuff in this order
+    // ImageViews -> Images -> Memory
+
+    // Cleanup Position Framebuffer attachment
+    m_device.destroyImageView(m_offscreen_framebuffer.position.image_view);
+    m_device.destroyImage(m_offscreen_framebuffer.position.image);
+    m_device.freeMemory(m_offscreen_framebuffer.position.memory);
+
+    // Cleanup Normal Framebuffer attachment
+    m_device.destroyImageView(m_offscreen_framebuffer.normal.image_view);
+    m_device.destroyImage(m_offscreen_framebuffer.normal.image);
+    m_device.freeMemory(m_offscreen_framebuffer.normal.memory);
+
+    // Cleanup Albedo Framebuffer attachment
+    m_device.destroyImageView(m_offscreen_framebuffer.albedo.image_view);
+    m_device.destroyImage(m_offscreen_framebuffer.albedo.image);
+    m_device.freeMemory(m_offscreen_framebuffer.albedo.memory);
+
+    // Cleanup Depth Framebuffer attachment
+    m_device.destroyImageView(m_offscreen_framebuffer.depth.image_view);
+    m_device.destroyImage(m_offscreen_framebuffer.depth.image);
+    m_device.freeMemory(m_offscreen_framebuffer.depth.memory);
+
+    // Cleanup Offscreen Framebuffer
+    m_device.destroyFramebuffer(m_offscreen_framebuffer.frameBuffer);
+
+    // Destroy pipelines
+    m_device.destroyPipeline(m_graphics_pipelines.deferred);
+    m_device.destroyPipeline(m_graphics_pipelines.offscreen);
+    m_device.destroyPipeline(m_graphics_pipelines.debug);
+
+    // Destroy Pipeline Layouts
+    m_device.destroyPipelineLayout(m_pipeline_layouts.deferred);
+    m_device.destroyPipelineLayout(m_pipeline_layouts.offscreen);
+
+    // Destroy Meshes
+    for (auto& mesh : m_meshes) {
+        mesh.destroy(m_device);
+    }
+
+    // Destroy UBOs
+
+    // Free command buffers
+    m_device.freeCommandBuffers(m_command_pool, 1, &m_offscreen_commandbuffer);
+
+    // Destroy Render Pass
+
+    // Destroy Mesh Textures
+
+    // Destroy Offscreen semaphore
+    m_device.destroySemaphore(m_offscreen_semaphore);
+
     // Cleanup the SwapChain
     cleanupSwapChain();
-
-    // TODO: Clean up Textures
-    // Samplers
-    // ImageViews
-    // Images
-    // Memory
 
     // Destroy Descriptor Pool
     if (m_descriptor_pool) {
@@ -3991,11 +4037,6 @@ renderer::cleanup()
     }
 
     m_device.destroyDescriptorSetLayout(m_descriptor_set_layout);
-
-    for (auto& mesh : m_meshes) {
-        mesh.destroy(m_device);
-    }
-
     // command buffers are implicitly deleted when their command pool is deleted
     // m_device.destroyCommandPool(m_command_pool);
 
