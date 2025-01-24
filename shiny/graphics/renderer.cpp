@@ -68,6 +68,9 @@ shadow map generation.
 #include <set>
 #include <vector>
 
+#define NDEBUG
+#include <assert.h>
+
 #define TEX_DIM 2048
 #define FB_DIM TEX_DIM
 
@@ -93,6 +96,7 @@ shadow map generation.
 #define UNREFERENCED_PARAMETER(P) (P)
 
 namespace {
+
 const bool debugDisplay = false;
 
 const uint32_t WIDTH  = 1280;
@@ -101,7 +105,7 @@ const uint32_t HEIGHT = 800;
 using VulkanExtensionName = const char*;
 using VulkanLayerName     = const char*;
 
-const std::vector<VulkanLayerName> validationLayers = { "VK_LAYER_LUNARG_standard_validation" };
+const std::vector<VulkanLayerName> validationLayers = { "VK_LAYER_LUNARG_standard_validation", "VK_LAYER_LUNARG_core_validation" };
 
 const std::vector<VulkanExtensionName> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
@@ -410,22 +414,16 @@ checkValidationLayerSupport()
 {
     std::vector<vk::LayerProperties> availableLayers = vk::enumerateInstanceLayerProperties();
 
+    bool layerFound = false;
     for (const char* layerName : validationLayers) {
-        bool layerFound = false;
-
         for (const auto& layerProperties : availableLayers) {
             if (std::strcmp(layerName, layerProperties.layerName) == 0) {
                 layerFound = true;
                 break;
             }
         }
-
-        if (!layerFound) {
-            return false;
-        }
     }
-
-    return true;
+    return layerFound;
 }
 
 /*
