@@ -22,7 +22,7 @@
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{F50AD0F9-6B3C-4862-9B1F-CA58313326CA}</ProjectGuid>
     <RootNamespace>shiny</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.17134.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -70,12 +70,12 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LibraryPath>$(ProjectDir)libs\;$(LibraryPath);$(VULKAN_SDK)\Lib;</LibraryPath>
+    <LibraryPath>$(ProjectDir)libs\;$(LibraryPath);$(VULKAN_SDK)\Lib;C:\Repositories\shiny\shiny\libs\assimp</LibraryPath>
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
     <SourcePath>$(VC_SourcePath);$(VULKAN_SDK)\Source\lib;</SourcePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LibraryPath>$(ProjectDir)libs\;$(LibraryPath);$(VULKAN_SDK)\Lib;</LibraryPath>
+    <LibraryPath>C:\Repositories\shiny\shiny\libs\assimp;$(ProjectDir)libs\;$(LibraryPath);$(VULKAN_SDK)\Lib</LibraryPath>
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
     <SourcePath>$(VC_SourcePath);$(VULKAN_SDK)\Source\lib;</SourcePath>
   </PropertyGroup>
@@ -110,11 +110,12 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include\;$(ProjectDir);$(VULKAN_SDK)\Include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>FreeImage.lib;glfw3.lib;vulkan-1.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>FreeImage.lib;glfw3.lib;vulkan-1.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;assimp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <CustomBuildStep>
       <Command>
@@ -129,8 +130,13 @@
       <Message>Copy the dlls over</Message>
     </PostBuildEvent>
     <PreBuildEvent>
-      <Command>glslangValidator.exe -V $(ProjectDir)shaders\shader.vert -o $(ProjectDir)shaders\vert.spv
-glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders\frag.spv</Command>
+      <Command>glslangvalidator -V $(ProjectDir)shaders\deferred\deferred.vert -o $(ProjectDir)shaders\deferred\deferred.vert.spv
+glslangvalidator -V $(ProjectDir)shaders\deferred\deferred.frag -o $(ProjectDir)shaders\deferred\deferred.frag.spv
+glslangvalidator -V $(ProjectDir)shaders\deferred\mrt.vert -o $(ProjectDir)shaders\deferred\mrt.vert.spv
+glslangvalidator -V $(ProjectDir)shaders\deferred\mrt.frag -o $(ProjectDir)shaders\deferred\mrt.frag.spv
+glslangvalidator -V $(ProjectDir)shaders\deferred\debug.vert -o $(ProjectDir)shaders\deferred\debug.vert.spv
+glslangvalidator -V $(ProjectDir)shaders\deferred\debug.frag -o $(ProjectDir)shaders\deferred\debug.frag.spv
+</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -172,7 +178,8 @@ glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>FreeImage.lib;glfw3.lib;vulkan-1.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>FreeImage.lib;glfw3.lib;vulkan-1.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;assimp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <CustomBuildStep>
       <Command>
@@ -192,12 +199,19 @@ glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="game\Game.cpp" />
     <ClCompile Include="graphics\renderer.cpp" />
+    <ClCompile Include="graphics\texture.cpp" />
     <ClCompile Include="include\glm\detail\glm.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="stdafx.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="game\Game.h" />
     <ClInclude Include="graphics\renderer.h" />
+    <ClInclude Include="graphics\texture.h" />
+    <ClInclude Include="Resource.h" />
+    <ClInclude Include="stdafx.h" />
     <ClInclude Include="include\FreeImage.h" />
     <ClInclude Include="include\GLFW\glfw3.h" />
     <ClInclude Include="include\GLFW\glfw3native.h" />
@@ -350,6 +364,7 @@ glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders
     <ClInclude Include="include\glm\vector_relational.hpp" />
     <ClInclude Include="include\stb_image.h" />
     <ClInclude Include="include\tiny_obj_loader.h" />
+    <ClInclude Include="vulkanbase\camera.hpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="include\glm\detail\func_common.inl" />
@@ -466,6 +481,12 @@ glslangValidator.exe -V $(ProjectDir)shaders\shader.frag -o $(ProjectDir)shaders
     <None Include="include\glm\gtx\vector_angle.inl" />
     <None Include="include\glm\gtx\vector_query.inl" />
     <None Include="include\glm\gtx\wrap.inl" />
+    <None Include="shaders\deferred\debug.frag">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="shaders\deferred\debug.vert">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </None>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
