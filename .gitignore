@@ -315,3 +315,7 @@ ASALocalRun/
 
 # MSBuild Binary and Structured Log
 *.binlog
+
+# SPIR-V Files
+*.spv
+

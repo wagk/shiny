@@ -1,25 +1,27 @@
-#define GLFW_INCLUDE_VULKAN
-#include <FreeImage.h>
-#include <GLFW/glfw3.h>
+//#include "Resource.h"
+//#include "stdafx.h"
 
 #include <iostream>
 #include <stdexcept>
 
+#include <game/Game.h>
 #include <graphics/renderer.h>
-//#include <renderer.h>
-//#include <vk/instance.h>
-//#include <window.h>
 
+// #define WINDOW_WIDTH 1280
+// #define WINDOW_HEIGHT 720
+// #define MAX_LOADSTRING 100
+
+// This is the old main. Keeping this as a fallback until I get the rest setup right
 int
 main()
 {
-    shiny::graphics::renderer renderer;
+    // shiny::Game m_game;
+
+    shiny::renderer renderer;
 
     try {
-        // while (shiny::renderer::singleton().glfw_window().close_window() == false) {
-        //    shiny::renderer::singleton().glfw_window().poll_events();
-        //}
         renderer.run();
+        // m_game.Run();
     } catch (const std::runtime_error& e) {
         std::cerr << e.what() << std::endl;
         return EXIT_FAILURE;
